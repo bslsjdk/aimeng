@@ -60,7 +60,8 @@ python scripts/evaluate_budget_controller.py --input data/telemetry.jsonl --mode
   "budget": "small",
   "quality_label": "fail",
   "status": "completed",
-  "whole_app_pss_mib": 2500
+  "whole_app_pss_mib": 2500,
+  "memory_measurement_source": "android_whole_app"
 }
 ```
 
@@ -73,13 +74,13 @@ python scripts/online_adaptation.py --input runs/observation.json
 决策规则：
 
 - 独立验证器给出 `pass`：停止本任务。
-- 给出 `fail`，且整应用 PSS 有实测值并低于默认软门槛 3584 MiB：建议从 small 升到 medium，或从 medium 升到 full。
-- PSS 缺失、质量为 `unknown`、超时、OOM 或执行失败：不盲目增加预算。
+- 给出 `fail`，且整应用 PSS 有实测值、来源标记为 `android_whole_app` 并低于默认软门槛 3584 MiB：建议从 small 升到 medium，或从 medium 升到 full。
+- PSS 缺失、来源不可信（例如只有 llama-cli 子进程 PSS）、质量为 `unknown`、超时、OOM 或执行失败：不盲目增加预算。
 - 达到 4096 MiB 硬限制：立即输出内存违规停止决策；安全约束不能被质量奖励覆盖。
 - full 预算仍失败：停止并记录失败，不无限循环。
 - 所有决策都将 `persistent_update` 设为 false；跨任务的持久学习仍须经过数据审核、离线训练、独立测试和版本回滚门槛。
 
-**重要：** `whole_app_pss_mib` 必须来自目标 Android 上对整个应用进程/进程组的真实测量。采集器记录的 llama-cli 子进程 PSS 不能冒充整个 Android 应用的 PSS。该脚本当前是策略原型，尚未接入实际推理执行器；单元测试通过也不代表已验证真实加速或手机内存安全。
+**重要：** `whole_app_pss_mib` 必须来自目标 Android 上对整个应用进程/进程组的真实测量，并将 `memory_measurement_source` 设为 `android_whole_app`。仅有数值而无可信来源标记时，决策器会拒绝升档。采集器记录的 llama-cli 子进程 PSS 不能冒充整个 Android 应用的 PSS。该脚本当前是策略原型，尚未接入实际推理执行器；单元测试通过也不代表已验证真实加速或手机内存安全。
 
 ## GPU offload 与预测
 
