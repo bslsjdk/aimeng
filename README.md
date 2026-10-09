@@ -88,3 +88,5 @@ python scripts/collect_budget_traces.py \\
 - 新增测试：`tests/test_bounded_workspace.py` 覆盖工作集准入、LRU、锁定和知识数据去重。需要运行完整测试套件后再判断是否通过。
 
 当前这一步建立的是可测试的框架与知识数据入口，不是已完成的 Android 动态权重分页实现。4096 MiB 仍须以整应用设备实测为准。
+
+- 教师抽取提示模板：[prompts/teacher_knowledge_extraction.md](prompts/teacher_knowledge_extraction.md)，以及示例 JSONL：[examples/knowledge-records.example.jsonl](examples/knowledge-records.example.jsonl)。示例中的模型哈希是占位符，导入真实数据前必须替换。
