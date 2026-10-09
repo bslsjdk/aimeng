@@ -21,6 +21,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_evaluate_student_sft.py' -v
       - name: Test release promotion gate
         run: python -m unittest discover -s tests -p 'test_gate_student_release.py' -v
+      - name: Test Ornith teacher demo generator helpers
+        run: python -m unittest discover -s tests -p 'test_generate_ornith_teacher_demos.py' -v
       - name: Test importer, trainer and release-gate command-line help
         run: |
           python scripts/import_teacher_demos.py --help
