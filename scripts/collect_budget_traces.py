@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
@@ -88,10 +89,13 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
     output = ""
     error_text = ""
     status = "completed"
-    process: subprocess.Popen[str] | None = None
+    process: subprocess.Popen[bytes] | None = None
+    stdout_file = tempfile.TemporaryFile()
+    stderr_file = tempfile.TemporaryFile()
     try:
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   text=True, encoding="utf-8", errors="replace")
+        # File-backed output prevents a full stdout/stderr pipe from deadlocking
+        # llama-cli while the parent is polling process memory.
+        process = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file)
         deadline = start + timeout_s
         while process.poll() is None:
             current_rss, current_pss = read_process_memory_mib(process.pid)
@@ -104,9 +108,11 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
                 status = "timeout"
                 break
             time.sleep(0.1)
-        stdout, stderr = process.communicate(timeout=5)
-        output = stdout or ""
-        error_text = (stderr or "")[-2000:]
+        process.wait(timeout=5)
+        stdout_file.seek(0)
+        stderr_file.seek(0)
+        output = stdout_file.read().decode("utf-8", errors="replace")
+        error_text = stderr_file.read().decode("utf-8", errors="replace")[-2000:]
         if status == "completed" and process.returncode != 0:
             status = "failed"
     except Exception as exc:
@@ -115,9 +121,12 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
         if process and process.poll() is None:
             process.kill()
             try:
-                process.communicate(timeout=5)
+                process.wait(timeout=5)
             except Exception:
                 pass
+    finally:
+        stdout_file.close()
+        stderr_file.close()
 
     latency_ms = round((time.monotonic() - start) * 1000, 2)
     if status == "completed":
