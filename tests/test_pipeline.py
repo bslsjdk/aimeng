@@ -20,6 +20,7 @@ trainer = load_module("trainer", "scripts/train_budget_controller.py")
 validator = load_module("validator", "scripts/validate_telemetry.py")
 evaluator = load_module("evaluator", "scripts/evaluate_budget_controller.py")
 adaptation = load_module("adaptation", "scripts/online_adaptation.py")
+experience = load_module("experience", "scripts/experience_learning.py")
 
 
 class CollectorTests(unittest.TestCase):
@@ -231,6 +232,56 @@ class TelemetryValidatorTests(unittest.TestCase):
         self.assertEqual(report["quality_pass_rate"], 0.5)
         self.assertEqual(report["mean_latency_ms"], 300.0)
         self.assertEqual(report["pss_measurements"], 1)
+
+
+class ExperienceLearningTests(unittest.TestCase):
+    def test_no_history_uses_direct_baseline(self):
+        decision = experience.choose_strategy("coding", [])
+        self.assertEqual(decision["strategy"], "direct")
+        self.assertEqual(decision["reason"], "insufficient_verified_history")
+
+    def test_unknown_feedback_cannot_be_persisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                experience.append_experience(
+                    Path(directory) / "memory.jsonl", task_id="t1",
+                    task_family="coding", strategy="verify",
+                    quality_label="unknown", verifier="none",
+                )
+
+    def test_verified_history_learns_best_strategy_and_latency_breaks_ties(self):
+        rows = []
+        for i in range(3):
+            rows.append({"task_family": "coding", "strategy": "direct",
+                         "quality_label": "pass", "latency_ms": 100.0})
+            rows.append({"task_family": "coding", "strategy": "verify",
+                         "quality_label": "pass", "latency_ms": 70.0})
+        decision = experience.choose_strategy("coding", rows)
+        self.assertEqual(decision["strategy"], "verify")
+        self.assertEqual(decision["pass_rate"], 1.0)
+
+    def test_failed_answers_never_beat_higher_quality_strategy_for_speed(self):
+        rows = [
+            {"task_family": "math", "strategy": "direct", "quality_label": "pass", "latency_ms": 100.0},
+            {"task_family": "math", "strategy": "direct", "quality_label": "pass", "latency_ms": 100.0},
+            {"task_family": "math", "strategy": "decompose", "quality_label": "fail", "latency_ms": 1.0},
+            {"task_family": "math", "strategy": "decompose", "quality_label": "fail", "latency_ms": 1.0},
+        ]
+        self.assertEqual(experience.choose_strategy("math", rows)["strategy"], "direct")
+
+    def test_experience_round_trip_and_prompt_strategy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.jsonl"
+            experience.append_experience(
+                path, task_id="task-1", task_family="math", strategy="decompose",
+                quality_label="pass", verifier="exact_match_v1", latency_ms=120,
+                prompt="What is 2 + 2?",
+            )
+            loaded = experience.load_experiences(path)
+            self.assertEqual(len(loaded), 1)
+            prompt = experience.build_prompt("What is 2 + 2?", "decompose")
+            self.assertIn("AIMENG strategy=decompose", prompt)
+            self.assertIn("What is 2 + 2?", prompt)
 
 
 if __name__ == "__main__":
