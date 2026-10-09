@@ -8,7 +8,7 @@
 - 显式选择 ID 后批量保存、导出 ZIP、启用/停用、独立数据集评测。
 - runs/neuron-manager.jsonl 追加记录成功和失败事件，包含 run ID、事件 ID、时间、结果、错误类型/消息。
 - 保存快照含 manifest 与哈希；导出包包含工件和 manifest。
-- 评测后按 held-out MSE 阈值标记 excellent 或 candidate。不会自动删除“差”的模型，避免一次评测或错误数据造成不可恢复的数据损失。通过人工复核后再另行归档/淘汰。
+- 评测后按 held-out MSE 阈值标记 excellent、candidate 或 rejected。excellent 与 candidate 都会自动保存带哈希的快照；达到 --reject-above-mse 的神经元会被停用并归档到 rejected 目录，但不会物理删除，保留复查与恢复能力。默认 excellent 阈值 0.05、rejected 阈值 1.0；阈值应按具体任务尺度校准，不能跨任务直接比较。
 - 缺注册表时 list 会报错并写日志；只有显式 import 真实有效工件才会创建注册表。不会拿测试用例伪装成实际神经元。
 
 ## 工件格式（当前评测适配器）
@@ -53,3 +53,8 @@
 ## 尚未完成的边界
 
 这次增加的是可执行的 Python 管理与日志基础层，不是 Android 图形管理页。它尚未集成真实神经元训练器、任意模型格式推理后端或自动晋级/永久淘汰策略。手机导航栏遮挡和顶部 UI 重叠，需要对实际承载神经元管理界面的 Android Activity/layout 单独修改并在设备上验收。
+
+
+## 可下载的导入冒烟测试文件
+
+目录 tests/fixtures/neuron_manager_smoke/ 内有一个显式标记 TEST-ONLY 的合成工件和独立测试数据。它们只验证文件导入与评测链路，不是训练结果。可按目录内 README 操作。GitHub Actions 会自动运行这条冒烟测试；它不会把 TEST-ONLY ID 注册到正式默认数据目录。
