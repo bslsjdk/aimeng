@@ -346,7 +346,9 @@ def main() -> int:
                                  args.device_class, args.accelerator)
                 record["routing"]["reasoning_strategy"] = selected_strategy
                 record["routing"]["strategy_memory_enabled"] = bool(strategy_api)
-                if strategy_api and record["result"]["status"] == "completed" and record["result"]["quality_verifier"] != "none":
+                if (strategy_api and budget["budget_id"] == "full-v1"
+                        and record["result"]["status"] == "completed"
+                        and record["result"]["quality_verifier"] != "none"):
                     try:
                         append_experience(
                             args.strategy_memory,
