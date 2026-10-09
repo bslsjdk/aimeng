@@ -92,6 +92,7 @@ def main() -> int:
     parser.add_argument("--regression", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--max-new-tokens", type=int, default=256)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
     args = parser.parse_args()
     if args.max_new_tokens < 1:
         parser.error("--max-new-tokens must be positive")
@@ -108,6 +109,15 @@ def main() -> int:
         raise SystemExit("Install compatible torch and transformers before model evaluation") from exc
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=False)
     model = AutoModelForCausalLM.from_pretrained(args.model, trust_remote_code=False)
+    if args.device == "auto":
+        device = "cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
+    else:
+        device = args.device
+    if device == "cuda" and not torch.cuda.is_available():
+        raise SystemExit("CUDA requested but unavailable")
+    if device == "mps" and not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+        raise SystemExit("MPS requested but unavailable")
+    model.to(device)
     model.eval()
     heldout = evaluate_suite(model, tokenizer, heldout_rows, args.max_new_tokens)
     regression = evaluate_suite(model, tokenizer, regression_rows, args.max_new_tokens)
