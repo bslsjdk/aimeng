@@ -92,3 +92,18 @@ python scripts/collect_budget_traces.py \\
 - [AIMENG 与 AI 运行时集成契约](docs/RUNTIME_INTEGRATION_CONTRACT.md) 明确两个仓库的职责、模型工件可替换原则、训练产物与部署工件的区别，以及下一步必须从真实运行时代码确认的接口。
 - 训练侧的知识记录和任务轨迹使用与模型权重格式无关的 schema。只有部署适配层需要知道运行时具体接受什么格式。
 - 当前工作集是调度器原型，不是实际动态权重分页。后续必须对接 `bslsjdk/ai` 的真实加载、generate、KV/预算和性能遥测入口，再验证整应用 4096 MiB 硬约束。
+
+
+## 训练数据基础设施（模型格式无关）
+
+- [训练优先路线图](docs/TRAINING_FIRST_ROADMAP.md)：先构建与验证 AI 能力，再决定学生模型和手机部署格式。
+- [任务轨迹 schema](schemas/task_trajectory.schema.json)：定义输入、候选目标、独立验证结果、来源、隐私审查与数据拆分。
+- [训练数据审计脚本](scripts/validate_training_data.py)：检查 JSONL 结构、重复 sample ID、pass/fail 是否具备独立验证证据，以及同一 task_id 是否跨 train/validation/test 泄漏。
+- [轨迹示例](examples/trajectory.example.jsonl)：仅为格式演示，状态为 unknown，不是可直接用于监督训练的正例。
+
+运行数据审计：
+```bash
+python scripts/validate_training_data.py --input examples/trajectory.example.jsonl --report runs/data-audit.json
+```
+
+此脚本只检查结构和数据拆分，不证明目标答案正确、来源许可有效或模型训练成功。只有带有可靠独立标签的数据才应进入监督训练。
