@@ -4,8 +4,6 @@ Metadata only: this module does NOT load model weights, force OS page eviction,
 or prove a process/whole-app RAM bound. A real backend adapter must implement
 and measure those operations before claiming memory savings.
 """
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
