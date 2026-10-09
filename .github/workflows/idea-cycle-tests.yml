@@ -23,6 +23,7 @@ on:
       - "tests/test_correction_trace.py"
       - "tests/test_artifact_integrity_verifier.py"
       - "tests/test_parameter_workspace_simulation.py"
+      - "docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md"
       - ".github/workflows/idea-cycle-tests.yml"
   pull_request:
     paths:
