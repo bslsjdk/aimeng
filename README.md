@@ -122,7 +122,8 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 - [并发训练设计与验收方法](docs/PARALLEL_TRAINING.md)：明确独立专家并行、同一模型分布式训练和错误的多优化器并发之间的区别。
 - scripts/parallel_training.py：按声明的 RAM/VRAM 预算与最大 worker 数调度独立训练进程，分别保存日志/输出并生成运行报告。
-- examples/parallel-training-plan.example.json：两任务计划示例；其中训练命令是占位符，必须替换为真实训练入口后才能运行。
-- tests/test_parallel_training.py：覆盖计划校验、超预算拒绝、输出目录隔离、dry-run 和两个独立命令的执行。
+- examples/parallel-training-plan.example.json：可运行的双任务示例，使用 scripts/toy_train.py 训练两个独立的极小分类模型并分别保存 checkpoint。该示例只验证并发管线，不是语言模型训练。
+- scripts/toy_train.py：纯 Python 训练 smoke test，分别拟合两种不同的合成分类任务。
+- tests/test_parallel_training.py：覆盖计划校验、超预算拒绝、输出目录隔离、dry-run，以及两个独立小模型并发训练和 checkpoint 分离。
 
 先只运行 --dry-run 验证配置，再用两个小任务比较串行与并发的真实耗时、峰值内存和验证质量。这里的内存数值是调度预算，不是操作系统强制限制；该原型没有实现梯度同步，也没有声称已经加速模型训练。
