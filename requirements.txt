@@ -1,0 +1,3 @@
+# Keep the initial environment small and reproducible.
+# gguf is the metadata/tensor reader distributed with llama.cpp.
+gguf>=0.10.0
