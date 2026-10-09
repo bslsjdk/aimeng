@@ -156,3 +156,12 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ## 人类式想法与可塑计算研究规格
 
 [人类式思考与可塑性实现规格](docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md)把自由联想、假设展开、自我质疑、独立验证、可恢复任务状态、临时参数适应、外部计算模块库、回滚与分阶段实验写成了可实现契约。方向仍是**单一统一核心模型，不采用 MoE**。该文档是实现规格，不代表动态神经元增长或人类式创造力已经实现；先完成可测试的软件闭环，再逐步实验 adapter 与真正的计算结构增长。
+
+
+首批可执行契约代码已加入同一分支：
+- `schemas/idea_record.schema.json` 与 `scripts/validate_idea_records.py`：想法状态与独立证据门槛。
+- `schemas/plastic_module.schema.json`：可塑模块的版本、兼容和晋级契约。
+- `scripts/idea_cycle_state.py`：可恢复的想法任务状态机与原子检查点。
+- `tests/test_idea_records.py`、`tests/test_idea_cycle_state.py` 和 `.github/workflows/idea-cycle-tests.yml`：自动化契约测试。
+
+这些代码目前建立的是数据/状态基础层，尚未接入真实模型生成、独立验证器或权重训练；以 GitHub Actions 的实际结果为准，不把提交代码等同于测试通过。
