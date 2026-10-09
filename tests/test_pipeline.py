@@ -112,6 +112,7 @@ class OnlineAdaptationTests(unittest.TestCase):
         decision = adaptation.decide_next_action({
             "budget": "small", "quality_label": "fail", "status": "completed",
             "whole_app_pss_mib": 2500,
+            "memory_measurement_source": "android_whole_app",
         })
         self.assertEqual(decision["action"], "retry_with_higher_budget")
         self.assertEqual(decision["next_budget"], "medium")
@@ -121,6 +122,7 @@ class OnlineAdaptationTests(unittest.TestCase):
         decision = adaptation.decide_next_action({
             "budget": "small", "quality_label": "unknown", "status": "completed",
             "whole_app_pss_mib": 2000,
+            "memory_measurement_source": "android_whole_app",
         })
         self.assertEqual(decision["action"], "stop_for_reliable_feedback")
         self.assertIsNone(decision["next_budget"])
@@ -136,6 +138,7 @@ class OnlineAdaptationTests(unittest.TestCase):
         decision = adaptation.decide_next_action({
             "budget": "small", "quality_label": "fail", "status": "completed",
             "whole_app_pss_mib": 3600,
+            "memory_measurement_source": "android_whole_app",
         })
         self.assertEqual(decision["action"], "stop_for_memory_headroom")
 
@@ -143,6 +146,7 @@ class OnlineAdaptationTests(unittest.TestCase):
         decision = adaptation.decide_next_action({
             "budget": "small", "quality_label": "pass", "status": "completed",
             "whole_app_pss_mib": 4096,
+            "memory_measurement_source": "android_whole_app",
         })
         self.assertEqual(decision["action"], "stop_and_flag_memory_violation")
 
@@ -150,6 +154,7 @@ class OnlineAdaptationTests(unittest.TestCase):
         decision = adaptation.decide_next_action({
             "budget": "full", "quality_label": "fail", "status": "completed",
             "whole_app_pss_mib": 2500,
+            "memory_measurement_source": "android_whole_app",
         })
         self.assertEqual(decision["action"], "stop_quality_failure")
         self.assertIsNone(decision["next_budget"])
@@ -158,10 +163,21 @@ class OnlineAdaptationTests(unittest.TestCase):
         decision = adaptation.decide_next_action({
             "budget": "small", "quality_label": "unknown", "status": "timeout",
             "whole_app_pss_mib": 2000,
+            "memory_measurement_source": "android_whole_app",
         })
         self.assertEqual(decision["action"], "stop_and_record_failure")
         self.assertIsNone(decision["next_budget"])
 
+
+
+    def test_child_process_pss_cannot_authorize_budget_escalation(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "fail", "status": "completed",
+            "whole_app_pss_mib": 1200,
+            "memory_measurement_source": "llama_cli_child_process",
+        })
+        self.assertEqual(decision["action"], "stop_for_memory_measurement")
+        self.assertIsNone(decision["next_budget"])
 
     def test_non_finite_memory_measurement_is_rejected(self):
         with self.assertRaises(ValueError):
