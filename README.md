@@ -147,3 +147,7 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ## 一键训练入口
 
 日常训练请优先使用 [一键学生训练流水线](docs/ONE_COMMAND_TRAINING.md)：`scripts/run_student_pipeline.py` 默认使用 LoRA 进行参数高效微调，并自动预检数据、运行原模型基线评测、执行 SFT、评测候选模型及保存输入快照与分步日志；需要全量微调时显式传入 `--full-finetune`。它会在关键门槛失败时停止，不覆盖已有运行。Android 整应用内存必须另行实测，训练成功不会自动晋级模型。
+
+## 免费 GPU：Ornith 教师生成 → 学生训练
+
+新增 [免费 GPU 蒸馏操作手册](docs/FREE_GPU_ORNITH_TO_STUDENT.md)、CUDA 教师生成器 `scripts/generate_ornith_teacher_demos.py` 和任务模板 `data/teacher_seed/gpu_tasks.example.jsonl`。它使用官方 Transformers checkpoint `ornith-ai/Ornith-1.5-9B` 并以 bitsandbytes NF4 4-bit 方式加载教师，生成的数据全部保持待核验、未拆分、不可训练。先用 `--limit 2` 做 smoke test，再生成批次；独立核验和数据拆分完成后，才进入既有一键学生训练流水线。注意教师推理和当前学生训练依赖版本约束不同，手册记录了分阶段环境要求。当前新增的是生成器与流程代码，不代表已在 Kaggle GPU 上实际运行成功。
