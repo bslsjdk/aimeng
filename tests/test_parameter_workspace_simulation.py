@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
@@ -7,6 +8,7 @@ SPEC = importlib.util.spec_from_file_location(
     "simulate_parameter_workspace", ROOT / "scripts" / "simulate_parameter_workspace.py"
 )
 module = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = module
 SPEC.loader.exec_module(module)
 
 
