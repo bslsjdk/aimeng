@@ -43,3 +43,15 @@ GGUF 是量化推理格式，不是常规梯度训练检查点。我们会把该
 ## 当前状态
 
 训练仓库已建立模型检查、下载和实验规范。模型下载是否完成、路由器是否训练成功、内存是否下降，都必须以实际运行记录为准；仓库文件本身不能证明这些结果。
+
+
+## 实验执行脚本（研究原型）
+
+- `scripts/validate_telemetry.py`：检查 JSONL 字段、重复 run ID、预算配对和任务拆分泄漏。
+- `scripts/collect_budget_traces.py`：调用兼容的 `llama-cli` 对同一任务跑 small/medium/full 三档；默认不请求 GPU offload，只有确认 CUDA 构建后才显式传 `--gpu-layers 99`。
+- `scripts/train_budget_controller.py`：从客观 pass/fail 结果中选择最低可靠预算，训练独立的小型 PyTorch 分类器；不更新 9B GGUF 权重。
+- `scripts/evaluate_budget_controller.py`：在独立 `test` 任务上报告预算标签准确率、质量通过率、平均延迟和可用 PSS，并与 full-budget 基线比较。
+- `scripts/predict_budget.py`：对单个任务特征做离线预算预测，不负责执行推理或安全回退。
+- `tests/test_pipeline.py` + GitHub Actions：覆盖基础验证器、训练目标、重复预算质量门槛和测试报告计算。
+
+详细步骤见 [采集与训练操作手册](docs/COLLECT_AND_TRAIN.md)。Colab Notebook 默认不编译后端、不启动耗时采集；需手动启用并检查真实后端日志。当前脚本和测试尚未在实际 Colab/GPU/目标手机上完成端到端验证，不能把代码提交视为模型训练成功。
