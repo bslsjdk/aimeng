@@ -9,6 +9,7 @@ on:
       - "scripts/validate_plastic_module.py"
       - "scripts/build_correction_feedback.py"
       - "scripts/validate_correction_trace.py"
+      - "scripts/verify_artifact_integrity.py"
       - "schemas/idea_record.schema.json"
       - "schemas/plastic_module.schema.json"
       - "schemas/task_state.schema.json"
@@ -19,6 +20,7 @@ on:
       - "tests/test_plastic_module_manifest.py"
       - "tests/test_correction_feedback.py"
       - "tests/test_correction_trace.py"
+      - "tests/test_artifact_integrity_verifier.py"
       - ".github/workflows/idea-cycle-tests.yml"
   pull_request:
     paths:
@@ -67,3 +69,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_correction_feedback.py'
       - name: Run correction trace invariant tests
         run: python -m unittest discover -s tests -p 'test_correction_trace.py'
+      - name: Run file-integrity verifier tests
+        run: python -m unittest discover -s tests -p 'test_artifact_integrity_verifier.py'
