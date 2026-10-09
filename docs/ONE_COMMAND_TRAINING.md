@@ -1,6 +1,6 @@
 # AIMENG 一键学生训练流水线
 
-这是日常训练唯一推荐的入口：`scripts/run_student_pipeline.py`。它把预检、基线评测、SFT、候选评测和运行记录整合成一次命令，减少手工复制参数导致的训练浪费。
+这是日常训练唯一推荐的入口：`scripts/run_student_pipeline.py`。它把预检、基线评测、SFT、候选评测和运行记录整合成一次命令，减少手工复制参数导致的训练浪费。默认使用 LoRA 参数高效微调，只更新少量适配器参数，以减少优化器内存和训练成本；评测器可以直接加载生成的 LoRA 适配器。
 
 ## 一次命令完成训练与评测
 
@@ -20,7 +20,7 @@ python scripts/run_student_pipeline.py \
   --gradient-checkpointing
 ```
 
-只需要替换四个路径/名称：已核验候选数据、兼容的可训练 Hugging Face causal-LM checkpoint、冻结 held-out 测试集、冻结旧能力回归集，以及一个全新的输出目录名。输出目录必须不存在；脚本不会覆盖旧运行。
+默认采用 LoRA（r=8、alpha=16）。只有确认训练资源充足、确实需要更新全部学生参数时，才额外添加 `--full-finetune`。不要把教师 9B 推理工件直接当成学生模型。\n\n只需要替换四个路径/名称：已核验候选数据、兼容的可训练 Hugging Face causal-LM checkpoint、冻结 held-out 测试集、冻结旧能力回归集，以及一个全新的输出目录名。输出目录必须不存在；脚本不会覆盖旧运行。
 
 ## 自动执行顺序
 
