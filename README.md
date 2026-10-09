@@ -54,10 +54,25 @@ GGUF 是量化推理格式，不是常规梯度训练检查点。我们会把该
 - `scripts/evaluate_budget_controller.py`：在独立 `test` 任务上报告预算标签准确率、质量通过率、平均延迟和可用 PSS，并与 full-budget 基线比较。
 - `scripts/predict_budget.py`：对单个任务特征做离线预算预测，不负责执行推理或安全回退。
 - `scripts/online_adaptation.py`：根据独立验证结果和整应用 PSS，输出任务内下一步动作；未知反馈、内存数据缺失、超时和 OOM 都不会触发盲目升档。它不更新主模型权重，也不直接执行推理。
+- `scripts/experience_learning.py`：保存独立验证通过/失败的策略经验，按任务类别学习 `direct/decompose/verify` 提示策略；可通过采集器的 `--strategy-memory` 接入 9B 推理实验。它学习的是策略选择，不修改 GGUF 权重。
 - `tests/test_pipeline.py` + GitHub Actions：覆盖基础验证器、训练目标、重复预算质量门槛和测试报告计算。
 
 详细步骤见 [采集与训练操作手册](docs/COLLECT_AND_TRAIN.md)。Colab Notebook 默认不编译后端、不启动耗时采集；需手动启用并检查真实后端日志。当前脚本和测试尚未在实际 Colab/GPU/目标手机上完成端到端验证，不能把代码提交视为模型训练成功。
 
+
+## 9B 行为层自我学习实验
+
+在已有 9B 模型上启用持久化策略记忆，不需要从零训练基础模型：
+
+```bash
+python scripts/collect_budget_traces.py \\
+  --model models/Ornith-1.5-9B-Q4_K_M.gguf \\
+  --tasks examples/tasks.example.jsonl \\
+  --output runs/strategy-traces.jsonl \\
+  --strategy-memory runs/verified-experiences.jsonl
+```
+
+策略记忆只接收带独立验证器的 pass/fail 结果，并以 full-budget 试验更新经验；第一次没有足够历史时使用 direct 策略。该功能目前属于实验性行为层学习，必须用独立任务集验证是否真的提升质量或速度。Android 整应用 4096 MiB 限制仍然有效，当前采集器的子进程内存数据不能证明手机端满足该限制。
 
 ## 在线学习机制
 
