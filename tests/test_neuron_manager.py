@@ -1,4 +1,3 @@
-import hashlib
 import importlib.util
 import json
 import subprocess
@@ -131,7 +130,9 @@ class NeuronManagerTests(unittest.TestCase):
             '{"input":[0.0],"target":1.0}\n'
             '{"input":[1.0],"target":3.0}\n', encoding="utf-8")
         result = manager.run(self.args("evaluate", ids=["N-001", "N-003"],
-                                       dataset=str(dataset), good_mse_threshold=0.05, reject_above_mse=10.0, snapshot_dir=str(self.root / "snapshots")))
+                                       dataset=str(dataset), good_mse_threshold=0.05,
+                                       reject_above_mse=10.0,
+                                       snapshot_dir=str(self.root / "snapshots")))
         self.assertTrue(result["ok"])
         scores = {row["id"]: row for row in result["results"]}
         self.assertEqual(scores["N-001"]["quality"], "excellent")
@@ -145,9 +146,9 @@ class NeuronManagerTests(unittest.TestCase):
     def test_bad_neuron_is_disabled_and_archived_without_deletion(self):
         dataset = self.root / "heldout-bad.jsonl"
         dataset.write_text(
-            '{"input":[-1.0],"target":-1.0}\\n'
-            '{"input":[0.0],"target":1.0}\\n'
-            '{"input":[1.0],"target":3.0}\\n', encoding="utf-8")
+            '{"input":[-1.0],"target":-1.0}\n'
+            '{"input":[0.0],"target":1.0}\n'
+            '{"input":[1.0],"target":3.0}\n', encoding="utf-8")
         result = manager.run(self.args("evaluate", ids=["N-003"], dataset=str(dataset),
                                        good_mse_threshold=0.05, reject_above_mse=1.0,
                                        snapshot_dir=str(self.root / "snapshots")))
