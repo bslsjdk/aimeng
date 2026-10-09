@@ -6,7 +6,7 @@ This workflow uses the official **quantized GGUF teacher** `ornith-ai/Ornith-1.5
 
 - Select a CUDA GPU runtime. Use a **CUDA-enabled llama.cpp build** with `llama-server` available on PATH. A CPU-only build may run slowly and will not satisfy the intended GPU route.
 - The generator starts `llama-server` itself with `--n-gpu-layers 99`, waits for `/health`, calls its local OpenAI-compatible chat API, and shuts the server down at exit. GPU offload is requested, but the actual backend/logs must be checked to confirm it worked.
-- Keep the first run tiny: `--limit 2`, `--context-size 2048`, `--max-input-tokens 1536`, and `--max-new-tokens 256`. The 5.78 GB file size is not a guarantee that every free GPU can load the model with the selected context/KV cache.
+- Keep the first run tiny: `--limit 2`, `--context-size 2048`, and `--max-new-tokens 256`. The 5.78 GB file size is not a guarantee that every free GPU can load the model with the selected context/KV cache.
 - Do not keep teacher and student in VRAM simultaneously. Generate demonstrations, let the teacher process exit, save the JSONL to persistent notebook output/storage, and only then start student training.
 - This teacher path uses llama.cpp, not the Python Transformers/bitsandbytes stack. The student SFT environment has its own Python dependency requirements; keep teacher inference and student training phases separate if their dependencies conflict.
 - The model may produce inaccurate answers. Every generated record remains pending and ineligible for training.
@@ -23,7 +23,6 @@ python scripts/generate_ornith_teacher_demos.py \
   --output /kaggle/working/teacher_smoke.jsonl \
   --limit 2 \
   --context-size 2048 \
-  --max-input-tokens 1536 \
   --max-new-tokens 256
 ```
 
