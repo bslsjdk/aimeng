@@ -11,7 +11,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Validate candidate batch structure
+      - name: Validate candidate batch 01 structure
+        run: python scripts/validate_sft_candidates.py --input data/teacher_seed/sft_candidates.jsonl
+      - name: Validate candidate batch 02 structure
         run: python scripts/validate_sft_candidates.py --input data/teacher_seed/sft_candidates_batch02.jsonl
-      - name: Test student training eligibility gates
+      - name: Test SFT eligibility, import, split and loss-mask gates
         run: python -m unittest discover -s tests -p 'test_train_student_sft.py' -v
+      - name: Test importer and trainer command-line help
+        run: |
+          python scripts/import_teacher_demos.py --help
+          python scripts/train_student_sft.py --help
