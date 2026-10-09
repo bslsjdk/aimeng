@@ -16,6 +16,7 @@ def load_module(name, path):
 collector = load_module("collector", "scripts/collect_budget_traces.py")
 trainer = load_module("trainer", "scripts/train_budget_controller.py")
 validator = load_module("validator", "scripts/validate_telemetry.py")
+evaluator = load_module("evaluator", "scripts/evaluate_budget_controller.py")
 
 
 class CollectorTests(unittest.TestCase):
@@ -107,6 +108,21 @@ class TelemetryValidatorTests(unittest.TestCase):
         row["budget"]["execution_mode"] = "simulation"
         row["routing"]["verified_compute_skipped"] = True
         self.assertTrue(any("simulation cannot claim" in error for error in validator.validate_record(row, 1)))
+
+    def test_evaluator_counts_unverified_runs_as_non_passes(self):
+        rows = [
+            {"result": {"status": "completed", "quality_label": "pass"},
+             "performance": {"total_latency_ms": 100},
+             "memory": {"process_peak_pss_mib": 120}},
+            {"result": {"status": "timeout", "quality_label": "unknown"},
+             "performance": {"total_latency_ms": 500},
+             "memory": {"process_peak_pss_mib": None}},
+        ]
+        report = evaluator.summarize_runs(rows)
+        self.assertEqual(report["runs"], 2)
+        self.assertEqual(report["quality_pass_rate"], 0.5)
+        self.assertEqual(report["mean_latency_ms"], 300.0)
+        self.assertEqual(report["pss_measurements"], 1)
 
 
 if __name__ == "__main__":
