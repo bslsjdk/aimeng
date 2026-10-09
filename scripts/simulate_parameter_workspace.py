@@ -191,6 +191,15 @@ class BoundedWorkspace:
         if unit_id not in self.units:
             raise WorkspaceError(f"unknown unit: {unit_id}")
         unit = self.units[unit_id]
+        dependent_units = [
+            other.unit_id for other in self.units.values()
+            if other.unit_id != unit_id and other.state in {"resident", "in_use", "evict_pending"}
+            and unit_id in self._dependency_order(other.unit_id)[:-1]
+        ]
+        if dependent_units:
+            raise WorkspaceError(
+                f"cannot unload {unit_id}; resident units depend on it: {sorted(dependent_units)}"
+            )
         if unit.in_use:
             unit.state = "evict_pending"
             self._record("evict_deferred_in_use", unit_id=unit_id)
