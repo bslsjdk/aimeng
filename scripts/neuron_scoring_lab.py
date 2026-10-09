@@ -74,31 +74,39 @@ def score_units(
     validation: Sequence[tuple[float, float]],
     compute_cost: float = 0.002,
 ) -> list[dict]:
-    """Estimate leave-one-out contribution; positive means removal hurts."""
+    """Estimate active-unit ablation or sleeping-unit admission value."""
     if not validation:
         raise ValueError("validation samples must not be empty")
     baseline = evaluate(units, validation)
     records = []
     for unit in units:
         was_enabled = unit.enabled
-        unit.enabled = False
-        without_unit = evaluate(units, validation)
-        unit.enabled = was_enabled
-        contribution = without_unit - baseline
+        if was_enabled:
+            unit.enabled = False
+            counterfactual_mse = evaluate(units, validation)
+            unit.enabled = True
+            contribution = counterfactual_mse - baseline
+            comparison = "remove_active_unit"
+        else:
+            unit.enabled = True
+            counterfactual_mse = evaluate(units, validation)
+            unit.enabled = False
+            contribution = baseline - counterfactual_mse
+            comparison = "admit_sleeping_unit"
         score = contribution - compute_cost
         unit.last_score = score
         records.append({
             "unit_id": unit.unit_id,
             "revision": unit.revision,
             "enabled": was_enabled,
+            "comparison": comparison,
             "baseline_mse": baseline,
-            "mse_without_unit": without_unit,
+            "counterfactual_mse": counterfactual_mse,
             "marginal_contribution": contribution,
             "compute_cost": compute_cost,
             "score": score,
         })
     return records
-
 
 def apply_score_policy(
     units: Sequence[Unit],
@@ -106,7 +114,7 @@ def apply_score_policy(
     enter_threshold: float = 0.0001,
     exit_threshold: float = -0.0001,
 ) -> list[dict]:
-    """Use separate enter/exit thresholds to reduce state-flapping."""
+    """Apply hysteresis while guaranteeing at least one active unit."""
     by_id = {record["unit_id"]: record for record in records}
     changes = []
     for unit in units:
@@ -126,8 +134,21 @@ def apply_score_policy(
                 "to": unit.state,
                 "score": score,
             })
+    if units and not any(unit.enabled for unit in units):
+        # Do not let simultaneous redundant-unit scores shut the whole system
+        # down. Keep the highest-scoring candidate active for the next cycle.
+        best = max(units, key=lambda item: by_id[item.unit_id]["score"])
+        best.enabled = True
+        best.state = "active"
+        changes.append({
+            "unit_id": best.unit_id,
+            "revision": best.revision,
+            "from": "sleeping",
+            "to": "active",
+            "score": by_id[best.unit_id]["score"],
+            "reason": "minimum_active_unit_safety_floor",
+        })
     return changes
-
 
 def run_experiment(epochs: int = 80) -> dict:
     if epochs < 1:
