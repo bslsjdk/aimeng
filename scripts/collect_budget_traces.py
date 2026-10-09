@@ -217,6 +217,8 @@ def main() -> int:
     parser.add_argument("--model", required=True, help="Path to the local GGUF file")
     parser.add_argument("--tasks", required=True, help="JSONL task file; one task per line")
     parser.add_argument("--output", default="data/telemetry.jsonl")
+    parser.add_argument("--append", action="store_true",
+                        help="Append to an existing JSONL file; avoid for ordinary reruns to prevent accidental duplicate trials")
     parser.add_argument("--llama-cli", default=os.environ.get("LLAMA_CLI", "llama-cli"))
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--threads", type=int, default=4)
@@ -260,7 +262,7 @@ def main() -> int:
     if args.gpu_layers < 0:
         parser.error("--gpu-layers must be >= 0")
     budget_set = [dict(b, threads=args.threads, gpu_layers=args.gpu_layers) for b in BUDGETS]
-    with output_path.open("a", encoding="utf-8") as out:
+    with output_path.open("a" if args.append else "w", encoding="utf-8") as out:
         for index, task in enumerate(tasks, 1):
             for budget in budget_set:
                 record = run_one(cli, args.model, task, budget, args.timeout,
