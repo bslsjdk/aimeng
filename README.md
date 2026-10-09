@@ -193,3 +193,7 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 
 首个可执行原型已加入：`scripts/simulate_parameter_workspace.py`，测试位于 `tests/test_parameter_workspace_simulation.py`。它模拟参数单元依赖、驻留字节预算、LRU 淘汰、使用中保护、延迟卸载和加载失败回滚，CI 已加入相应测试。它只是调度逻辑模拟，**不加载真实权重、不释放系统内存，也不证明推理计算量或延迟下降**。示例计划与命令见 [动态参数激活与加载架构规格第 12 节](docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md#12-first-executable-artifact-trace-only-workspace-simulator)。
+
+### External and internal neural units
+
+The same computational-unit contract covers model-learned candidates, human-authored modules, imported compatible units, and structures integrated into a versioned core-model graph. See [External and Internal Neural Units](docs/EXTERNAL_AND_INTERNAL_NEURAL_UNITS.md) for lifecycle states, manifests, loading/integration rules, validation gates, rollback, and the current implementation boundary.
