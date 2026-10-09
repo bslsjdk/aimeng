@@ -106,9 +106,16 @@ class BoundedWorkspace:
         return result
 
     def _evict_one(self, protected: set[str]) -> bool:
+        # A resident unit cannot be evicted while another resident/in-use unit
+        # depends on it, even if the dependency itself is not currently in use.
+        dependency_pins: set[str] = set()
+        for active in self.units.values():
+            if active.state in {"resident", "in_use", "evict_pending"}:
+                dependency_pins.update(self._dependency_order(active.unit_id)[:-1])
         candidates = [
             unit for unit in self.units.values()
-            if unit.state == "resident" and unit.in_use == 0 and unit.unit_id not in protected
+            if unit.state == "resident" and unit.in_use == 0
+            and unit.unit_id not in protected and unit.unit_id not in dependency_pins
         ]
         if not candidates:
             return False
@@ -177,7 +184,7 @@ class BoundedWorkspace:
             unit = self.units[name]
             unit.in_use -= 1
             if unit.in_use == 0:
-                unit.state = "resident"
+                unit.state = "unloaded" if unit.state == "evict_pending" else "resident"
         self._record("end_use", unit_id=unit_id, dependency_order=order)
 
     def unload(self, unit_id: str) -> None:
