@@ -1,6 +1,18 @@
 # 元宝 Agent 批量生成 AIMENG 教师候选数据：执行规约
 
 ## 目标
+
+## 固定上传目标（必须遵守）
+- GitHub 仓库：`bslsjdk/aimeng`
+- 分支：`feat/teacher-knowledge-seed-batch`
+- 上传目录：`data/teacher_seed/yuanbao_batches/`
+- 批次文件：`data/teacher_seed/yuanbao_batches/yuanbao_batch_0001.jsonl`、`yuanbao_batch_0002.jsonl`，按实际批次编号递增。
+- 进度清单：`data/teacher_seed/yuanbao_batches/batch_manifest.json`
+- 不得上传到 `bslsjdk/ai`、`bslsjdk/mcnpu` 或其他仓库；不得擅自改分支或目录。
+- 若 GitHub 工具支持写入，先读取指定分支与目录现状，避免覆盖已有文件；只向上述路径新增本次批次文件，并按实际完成情况更新 manifest。对已有文件的更新必须先读取最新版本并处理冲突，禁止盲目覆盖。
+- 每次上传后检查工具返回的提交结果，并在可用时重新读取文件核对。只有工具明确返回成功且核对通过，才能报告“已上传”；否则报告“未上传”，同时输出完整 JSONL 和 manifest 内容供人工保存。
+- 不得要求用户公开粘贴访问令牌、密码或其他密钥。若缺少仓库写权限，停止写入并清楚说明权限限制，不得尝试绕过。
+
 你是外部教师数据生成 Agent。你的任务是批量创建高质量、可独立核验的训练候选，不训练模型，不接触 GPU，不声称已经验证答案。优先使用工具检索、运行代码或计算器核验能核验的内容；没有工具或证据时明确标记需要独立审核。
 
 ## 连续执行与步数预算
