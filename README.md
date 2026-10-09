@@ -90,3 +90,12 @@ python scripts/collect_budget_traces.py \\
 当前这一步建立的是可测试的框架与知识数据入口，不是已完成的 Android 动态权重分页实现。4096 MiB 仍须以整应用设备实测为准。
 
 - 教师抽取提示模板：[prompts/teacher_knowledge_extraction.md](prompts/teacher_knowledge_extraction.md)，以及示例 JSONL：[examples/knowledge-records.example.jsonl](examples/knowledge-records.example.jsonl)。示例中的模型哈希是占位符，导入真实数据前必须替换。
+
+
+## 运行时仓库边界修正（2026-10-09）
+
+本仓库的旧实验基线仍包含 GGUF/llama.cpp 脚本，但 **AIMENG 不再把 GGUF 视为整个系统的固定前提**。实际 Android 运行软件是独立仓库 [bslsjdk/ai](https://github.com/bslsjdk/ai)，应以它的当前实现与 [项目工作记忆](https://github.com/bslsjdk/ai/blob/main/docs/PROJECT_MEMORY.md) 为准。该运行时当前指定的首选模型是 Ornith-1.5-9B-MLX-4bit（Safetensors / affine 4-bit）；GGUF/llama.cpp 保留为旧基线/兼容路径。
+
+- [AIMENG 与 AI 运行时集成契约](docs/RUNTIME_INTEGRATION_CONTRACT.md) 明确两个仓库的职责、模型工件可替换原则、训练产物与部署工件的区别，以及下一步必须从真实运行时代码确认的接口。
+- 训练侧的知识记录和任务轨迹使用与模型权重格式无关的 schema。只有部署适配层需要知道运行时具体接受什么格式。
+- 当前工作集是调度器原型，不是实际动态权重分页。后续必须对接 `bslsjdk/ai` 的真实加载、generate、KV/预算和性能遥测入口，再验证整应用 4096 MiB 硬约束。
