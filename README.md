@@ -127,3 +127,8 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 - tests/test_parallel_training.py：覆盖计划校验、超预算拒绝、输出目录隔离、dry-run，以及两个独立小模型并发训练和 checkpoint 分离。
 
 先只运行 --dry-run 验证配置，再用两个小任务比较串行与并发的真实耗时、峰值内存和验证质量。这里的内存数值是调度预算，不是操作系统强制限制；该原型没有实现梯度同步，也没有声称已经加速模型训练。
+
+
+## 资源感知奖励实验（设计提案）
+
+[资源感知奖励机制](docs/RESOURCE_AWARE_REWARD.md) 记录了“难题解出后给予额外奖励、资源占用扣分”的离线实验方案。难度奖励必须由固定基准模型的重复失败率和独立验证支持；任何硬内存/计算限制都不能被奖励抵消。该文档目前只是研究提案，尚未接入训练器，也没有声称已证明有效。
