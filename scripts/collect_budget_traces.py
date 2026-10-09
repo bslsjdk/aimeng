@@ -38,13 +38,13 @@ def read_process_memory_mib(pid: int) -> tuple[float | None, float | None]:
     pss_mib = None
     try:
         status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8", errors="replace")
-        match = re.search(r"^VmRSS:\\s+(\\d+)\\s+kB$", status, re.MULTILINE)
+        match = re.search(r"^VmRSS:\s+(\d+)\s+kB$", status, re.MULTILINE)
         rss_mib = round(int(match.group(1)) / 1024, 2) if match else None
     except (OSError, ValueError):
         pass
     try:
         text = Path(f"/proc/{pid}/smaps_rollup").read_text(encoding="utf-8", errors="replace")
-        match = re.search(r"^Pss:\\s+(\\d+)\\s+kB$", text, re.MULTILINE)
+        match = re.search(r"^Pss:\s+(\d+)\s+kB$", text, re.MULTILINE)
         pss_mib = round(int(match.group(1)) / 1024, 2) if match else None
     except (OSError, ValueError):
         pass
