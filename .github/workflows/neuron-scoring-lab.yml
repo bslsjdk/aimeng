@@ -1,0 +1,27 @@
+name: Neuron Scoring Lab
+
+on:
+  push:
+    branches: [feat/teacher-knowledge-seed-batch]
+    paths:
+      - "scripts/neuron_scoring_lab.py"
+      - "tests/test_neuron_scoring_lab.py"
+      - "docs/NEURON_SCORING_AND_ACTIVITY_CONTROL.md"
+      - ".github/workflows/neuron-scoring-lab.yml"
+  pull_request:
+    paths:
+      - "scripts/neuron_scoring_lab.py"
+      - "tests/test_neuron_scoring_lab.py"
+      - ".github/workflows/neuron-scoring-lab.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests -p 'test_neuron_scoring_lab.py'
+      - run: python scripts/neuron_scoring_lab.py --epochs 80 --trace /tmp/neuron-score-trace.jsonl
