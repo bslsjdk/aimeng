@@ -85,6 +85,28 @@
 
 只有通过质量与安全门槛的策略才比较这个成本。系数应由实际应用目标和测量数据确定，不提前编造固定权重。
 
+## 已落地的第一版策略记忆
+
+`scripts/experience_learning.py` 为冻结的 9B GGUF 增加了可持久化的行为层学习：它不改变模型权重，而是根据同类任务上由独立验证器确认的历史结果，在三种提示策略中选择：
+
+- `direct`：直接解题，作为无经验时的默认策略；
+- `decompose`：拆解任务并检查步骤依赖；
+- `verify`：先形成候选答案，再逐项检查约束。
+
+当某种策略在同一任务类别积累至少两个已验证样本后，系统优先比较通过率；只有通过率相同时，才用通过样本的实测延迟打破平局。未知反馈、没有独立验证器的结果不会写入记忆。采集器通过可选参数 `--strategy-memory` 启用该机制，并将同一任务的策略固定在 small/medium/full 配对试验中；只有 full-budget 试验写入跨任务策略记忆，避免同一任务被三档预算重复计数。
+
+示例：
+
+```bash
+python scripts/collect_budget_traces.py \
+  --model models/Ornith-1.5-9B-Q4_K_M.gguf \
+  --tasks examples/tasks.example.jsonl \
+  --output runs/strategy-traces.jsonl \
+  --strategy-memory runs/verified-experiences.jsonl
+```
+
+这是第一层“从结果中学会选择思考方式”，不是主模型权重训练，也不保证策略必然提高准确率或速度。要宣称收益，仍需在独立任务集上与不启用记忆的同模型基线进行配对评测，并同时比较质量、首 token 延迟、总延迟、token/s 和内存。当前采集器的质量标签仅对支持的精确匹配、包含匹配和 JSON 对象验证器有效；开放式任务仍应保持 unknown，不能让模型自己给自己打分。
+
 ## 是否在推理时更新权重？
 
 ### 方案 1：在线更新路由/预算（首选）
