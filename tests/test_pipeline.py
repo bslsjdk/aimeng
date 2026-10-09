@@ -240,6 +240,15 @@ class ExperienceLearningTests(unittest.TestCase):
         self.assertEqual(decision["strategy"], "direct")
         self.assertEqual(decision["reason"], "insufficient_verified_history")
 
+    def test_strategy_learning_explores_alternatives_instead_of_getting_stuck(self):
+        rows = [
+            {"task_id": "t1", "task_family": "coding", "strategy": "direct",
+             "quality_label": "pass", "latency_ms": 100.0},
+        ]
+        decision = experience.choose_strategy("coding", rows)
+        self.assertEqual(decision["strategy"], "decompose")
+        self.assertEqual(decision["reason"], "explore_under_sampled_strategy")
+
     def test_unknown_feedback_cannot_be_persisted(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
