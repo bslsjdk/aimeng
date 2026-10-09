@@ -56,7 +56,7 @@ def _validate_signal(value: Any, label: str, errors: list[str]) -> None:
             errors.append(f"{label}.{key} must be a non-empty string")
     if not _valid_hash(value.get("sha256")):
         errors.append(f"{label}.sha256 must be a 64-character SHA-256 hex string")
-    if value.get("outcome") not in OUTCOMES:
+    if not isinstance(value.get("outcome"), str) or value["outcome"] not in OUTCOMES:
         errors.append(f"{label}.outcome is invalid")
     if not _valid_hash(value.get("target_artifact_sha256")):
         errors.append(f"{label}.target_artifact_sha256 must be a SHA-256 hex string")
@@ -115,7 +115,7 @@ def validate_trace(trace: object) -> list[str]:
             if not isinstance(item, dict) or not _nonempty(item.get("hypothesis")):
                 errors.append(f"{label}.hypothesis must be a non-empty string")
                 continue
-            if item.get("confidence_label") not in {"low", "medium", "high"}:
+            if not isinstance(item.get("confidence_label"), str) or item["confidence_label"] not in {"low", "medium", "high"}:
                 errors.append(f"{label}.confidence_label must be low, medium, or high")
             refs = item.get("evidence_refs")
             if not isinstance(refs, list) or any(not _nonempty(ref) for ref in refs):
@@ -135,7 +135,7 @@ def validate_trace(trace: object) -> list[str]:
         errors.append("provenance.recorded_from must be an array of non-empty strings")
 
     status = trace.get("status")
-    if status not in STATUSES:
+    if not isinstance(status, str) or status not in STATUSES:
         errors.append("invalid status")
         return errors
 
@@ -178,6 +178,8 @@ def validate_trace(trace: object) -> list[str]:
             errors.append("failed_correction requires a failing recheck_signal")
         elif isinstance(correction, dict) and recheck.get("target_artifact_sha256") != correction.get("sha256"):
             errors.append("recheck_signal must target the correction_artifact hash")
+        if isinstance(initial, dict) and isinstance(recheck, dict) and recheck.get("scope") != initial.get("scope"):
+            errors.append("recheck scope must match the initial signal scope")
 
     elif status == "inconclusive":
         outcomes = [
@@ -186,8 +188,10 @@ def validate_trace(trace: object) -> list[str]:
         ]
         if not any(outcome in {"inconclusive", "unavailable"} for outcome in outcomes):
             errors.append("inconclusive status requires an inconclusive or unavailable signal")
-        if isinstance(recheck, dict) and isinstance(correction, dict):
-            if recheck.get("target_artifact_sha256") != correction.get("sha256"):
+        if isinstance(recheck, dict):
+            if not isinstance(correction, dict):
+                errors.append("an inconclusive recheck requires a correction_artifact")
+            elif recheck.get("target_artifact_sha256") != correction.get("sha256"):
                 errors.append("recheck_signal must target the correction_artifact hash")
 
     return errors
