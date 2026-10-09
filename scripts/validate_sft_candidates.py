@@ -110,7 +110,7 @@ def main() -> int:
     if args.report:
         target = Path(args.report)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(rendered + "\\n", encoding="utf-8")
+        target.write_text(rendered + "\n", encoding="utf-8")
     return 0 if not errors else 2
 
 
