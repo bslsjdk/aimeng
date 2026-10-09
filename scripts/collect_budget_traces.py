@@ -215,6 +215,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, help="Path to the local GGUF file")
+    parser.add_argument("--model-sha256", default=None, help="SHA-256 from the verified GGUF manifest; recommended for reproducible/resumable runs")
     parser.add_argument("--tasks", required=True, help="JSONL task file; one task per line")
     parser.add_argument("--output", default="data/telemetry.jsonl")
     output_mode = parser.add_mutually_exclusive_group()
@@ -262,6 +263,8 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if args.gpu_layers < 0:
         parser.error("--gpu-layers must be >= 0")
+    for task in tasks:
+        task["model_sha256"] = args.model_sha256
     budget_set = [dict(b, threads=args.threads, gpu_layers=args.gpu_layers) for b in BUDGETS]
     completed_keys: set[tuple[str, str]] = set()
     if args.resume and output_path.is_file():
@@ -273,6 +276,9 @@ def main() -> int:
                     old = json.loads(raw)
                 except json.JSONDecodeError as exc:
                     parser.error(f"cannot resume: invalid JSON at existing output line {line_no}: {exc.msg}")
+                old_hash = old.get("model", {}).get("sha256")
+                if old_hash != args.model_sha256:
+                    parser.error("cannot resume: model SHA-256 differs or is missing; use a new output file or supply the matching --model-sha256")
                 if (old.get("result", {}).get("status") == "completed"
                         and old.get("task_id") is not None
                         and old.get("budget", {}).get("budget_id") is not None):
