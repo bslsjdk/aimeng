@@ -44,7 +44,9 @@
 ```bash
 python scripts/import_teacher_demos.py \
   --input runs/teacher_raw.jsonl \
-  --output data/teacher_seed/imported_candidates.jsonl \\\n  --teacher-model "Ornith-1.5-9B" \\\n  --prompt-version "teacher_sft_batch_v1"
+  --output data/teacher_seed/imported_candidates.jsonl \
+  --teacher-model "Ornith-1.5-9B" \
+  --prompt-version "teacher_sft_batch_v1"
 
 python scripts/validate_sft_candidates.py \
   --input data/teacher_seed/imported_candidates.jsonl
