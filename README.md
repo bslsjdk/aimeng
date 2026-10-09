@@ -132,3 +132,10 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ## 资源感知奖励实验（设计提案）
 
 [资源感知奖励机制](docs/RESOURCE_AWARE_REWARD.md) 记录了“难题解出后给予额外奖励、资源占用扣分”的离线实验方案。难度奖励必须由固定基准模型的重复失败率和独立验证支持；任何硬内存/计算限制都不能被奖励抵消。该文档目前只是研究提案，尚未接入训练器，也没有声称已证明有效。
+
+
+## Ornith -> AIMENG 学生蒸馏基础框架
+
+可执行流程与当前限制见 [蒸馏运行手册](docs/DISTILLATION_RUNBOOK.md)。新增 `scripts/import_teacher_demos.py` 用于导入本地/远程教师生成的 JSONL；导入记录默认全部 pending、unassigned、ineligible。训练入口 `scripts/train_student_sft.py` 已加入 task_id 拆分泄漏检查、assistant-only loss mask、数据 SHA-256 与 run manifest，并兼容常见 Transformers 评估参数版本。CI 检查两批候选数据和关键训练门槛。
+
+**边界仍然重要：**这建立了可验证的通用 Hugging Face causal-LM response-SFT 路径，不代表已经接通 Ornith 自动推理，也不代表 AIMENG 自有非标准学生架构已原生训练。首次真实训练仍需可训练学生 checkpoint、经独立核验并完成拆分的数据，以及一次端到端 smoke test。
