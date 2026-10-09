@@ -22,6 +22,25 @@ runtime_constraints:
   adaptive_context: true
   allow_router_to_disable_safety_limit: false
 
+budget_profiles:
+  # Experimental llama.cpp request values. Confirm support with the exact backend
+  # build and benchmark on the target device before treating these as calibrated.
+  small:
+    n_ctx: 1024
+    max_tokens: 128
+    n_batch: 64
+    threads: 4
+  medium:
+    n_ctx: 2048
+    max_tokens: 256
+    n_batch: 128
+    threads: 4
+  full:
+    n_ctx: 4096
+    max_tokens: 512
+    n_batch: 256
+    threads: 4
+
 routing:
   # Phase 1 uses only real backend controls; channel skipping is deferred until proven.
   first_experiment: dynamic_budget_parameter_sweep
