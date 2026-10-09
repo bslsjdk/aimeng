@@ -1,0 +1,6 @@
+{
+  "format": "aimeng.linear_neuron.v1",
+  "weights": [2.0],
+  "bias": 1.0,
+  "_notice": "TEST ONLY SYNTHETIC FIXTURE. NOT A TRAINED OR REAL AIMENG NEURON."
+}
