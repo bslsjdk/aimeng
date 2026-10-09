@@ -103,5 +103,14 @@ class ParameterWorkspaceSimulationTests(unittest.TestCase):
         self.assertTrue(any("No actual OS/device memory" in row for row in report["limitations"]))
 
 
+    def test_dependency_cannot_be_unloaded_while_dependent_is_resident(self):
+        workspace = module.BoundedWorkspace.from_plan(plan())
+        workspace.load("math")
+        with self.assertRaises(module.WorkspaceError):
+            workspace.unload("base")
+        self.assertEqual(workspace.units["base"].state, "resident")
+        self.assertEqual(workspace.units["math"].state, "resident")
+
+
 if __name__ == "__main__":
     unittest.main()
