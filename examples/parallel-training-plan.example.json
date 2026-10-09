@@ -1,31 +1,39 @@
 {
-  "memory_budget_mb": 6000,
+  "memory_budget_mb": 512,
   "max_workers": 2,
   "jobs": [
     {
       "id": "expert_reasoning",
       "argv": [
         "python",
-        "train_expert.py",
-        "--config",
-        "configs/reasoning.json",
+        "scripts/toy_train.py",
+        "--task",
+        "reasoning",
+        "--steps",
+        "100",
+        "--seed",
+        "17",
         "--output",
-        "runs/expert_reasoning"
+        "runs/models/expert_reasoning"
       ],
-      "memory_mb": 4000,
+      "memory_mb": 128,
       "output_dir": "runs/parallel/expert_reasoning"
     },
     {
       "id": "expert_tool_use",
       "argv": [
         "python",
-        "train_expert.py",
-        "--config",
-        "configs/tool_use.json",
+        "scripts/toy_train.py",
+        "--task",
+        "tool_use",
+        "--steps",
+        "100",
+        "--seed",
+        "29",
         "--output",
-        "runs/expert_tool_use"
+        "runs/models/expert_tool_use"
       ],
-      "memory_mb": 2000,
+      "memory_mb": 128,
       "output_dir": "runs/parallel/expert_tool_use"
     }
   ]
