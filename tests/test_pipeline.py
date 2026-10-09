@@ -40,10 +40,10 @@ class CollectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fake_cli = Path(directory) / "fake-llama-cli"
             fake_cli.write_text(
-                "#!/usr/bin/env python3\\n"
-                "import sys\\n"
-                "print('Mercury')\\n"
-                "sys.stderr.write('diagnostic-line\\n' * 100000)\\n",
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "print('Mercury')\n"
+                "sys.stderr.write('diagnostic-line\n' * 100000)\n",
                 encoding="utf-8",
             )
             fake_cli.chmod(fake_cli.stat().st_mode | 0o111)
