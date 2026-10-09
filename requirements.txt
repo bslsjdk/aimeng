@@ -1,0 +1,4 @@
+# GGUF metadata/tensor reader distributed with llama.cpp
+gguf>=0.10.0
+# Official Hub client for cached/resumable multi-GB model downloads
+huggingface_hub>=0.30.0

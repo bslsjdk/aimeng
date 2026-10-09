@@ -1,0 +1,21 @@
+# Never commit large/private model weights
+models/
+data/
+*.gguf
+*.gguf.part
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.ckpt
+
+# Local runs and generated manifests may contain machine-specific paths
+runs/
+outputs/
+checkpoints/
+*.log
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
