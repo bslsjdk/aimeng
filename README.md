@@ -224,3 +224,12 @@ These are contracts and validation scaffolding, not a working neural-unit runtim
 python scripts/single_neuron_lab.py --epochs 60 --learning-rate 0.05 --trace runs/single-neuron-trace.jsonl
 python -m unittest discover -s tests -p 'test_single_neuron_lab.py'
 ```
+
+
+## 评分驱动的神经元进退场（第二阶段）
+
+- [评分与活动控制实验说明](docs/NEURON_SCORING_AND_ACTIVITY_CONTROL.md)：把预测贡献、纠错价值与计算成本纳入评分，使用独立的进入/退出阈值控制工作状态。
+- `scripts/neuron_scoring_lab.py`：多个独立线性单元先用给定样本更新参数，再通过 held-out 消融测量边际贡献，记录评分、参数更新和状态变化。
+- `tests/test_neuron_scoring_lab.py` 与 `.github/workflows/neuron-scoring-lab.yml`：检查保留集误差、评分字段、进退场状态切换与边界输入。
+
+这是确定性玩具实验，不是生物神经元或语言模型。当前版本为了避免候选永久饥饿，休眠单元仍会收到训练更新，因此尚未证明真实计算节省；必须以独立 CI 和后续同预算对照实验为准。
