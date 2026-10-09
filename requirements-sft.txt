@@ -1,0 +1,7 @@
+# Optional dependencies for the first Hugging Face SFT smoke test
+# Select a torch build matching the actual training hardware separately.
+torch>=2.3,<3
+transformers>=4.44,<5
+datasets>=2.20,<4
+accelerate>=0.34,<2
+peft>=0.13,<1

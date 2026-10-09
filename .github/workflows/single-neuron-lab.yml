@@ -1,0 +1,33 @@
+name: Single Neuron Lab
+
+on:
+  push:
+    branches: [feat/teacher-knowledge-seed-batch]
+    paths:
+      - "scripts/single_neuron_lab.py"
+      - "tests/test_single_neuron_lab.py"
+      - "docs/SINGLE_NEURON_LAB.md"
+      - ".github/workflows/single-neuron-lab.yml"
+  pull_request:
+    paths:
+      - "scripts/single_neuron_lab.py"
+      - "tests/test_single_neuron_lab.py"
+      - "docs/SINGLE_NEURON_LAB.md"
+      - ".github/workflows/single-neuron-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  single-neuron-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run single-neuron learning lab tests
+        run: python -m unittest discover -s tests -p 'test_single_neuron_lab.py'
+      - name: Run deterministic demo
+        run: python scripts/single_neuron_lab.py --epochs 60 --learning-rate 0.05 --trace /tmp/single-neuron-trace.jsonl

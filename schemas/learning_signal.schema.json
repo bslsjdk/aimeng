@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bslsjdk/aimeng/schemas/learning_signal.schema.json",
+  "title": "AIMENG External Learning Signal",
+  "type": "object",
+  "required": ["schema_version", "signal_id", "task_id", "target_artifact", "verifier", "outcome", "observed_at", "evidence_refs", "scope", "limitations"],
+  "properties": {
+    "schema_version": { "const": "aimeng.learning_signal.v1" },
+    "signal_id": { "type": "string", "minLength": 1 },
+    "task_id": { "type": "string", "minLength": 1 },
+    "target_artifact": {
+      "type": "object",
+      "required": ["ref", "sha256", "kind"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "kind": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "verifier": {
+      "type": "object",
+      "required": ["id", "version", "family"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "family": { "enum": ["unit_test", "compiler", "math_solver", "retrieval_crosscheck", "human_feedback", "task_outcome", "policy_check", "other"] }
+      },
+      "additionalProperties": false
+    },
+    "outcome": { "enum": ["pass", "fail", "inconclusive", "unavailable"] },
+    "error_category": { "type": ["string", "null"] },
+    "expected": { "type": ["string", "number", "boolean", "object", "array", "null"] },
+    "observed": { "type": ["string", "number", "boolean", "object", "array", "null"] },
+    "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "evidence_refs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "scope": { "type": "object" },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "correlation_id": { "type": ["string", "null"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "fail" } }, "required": ["outcome"] },
+      "then": {
+        "required": ["error_category"],
+        "properties": {
+          "error_category": { "type": "string", "minLength": 1 },
+          "evidence_refs": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "pass" } }, "required": ["outcome"] },
+      "then": { "properties": { "severity": { "enum": ["info", "low"] } } }
+    }
+  ],
+  "additionalProperties": false
+}

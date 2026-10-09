@@ -1,0 +1,8 @@
+{"task_id":"python-errors-001","topic":"programming.python.exceptions","difficulty":"basic","expected_verifier":"python_unit_test","prompt":"写一个简短的 Python 示例，演示如何捕获 ValueError，并解释为什么应该只捕获预期异常。"}
+{"task_id":"python-tests-001","topic":"programming.python.testing","difficulty":"intermediate","expected_verifier":"pytest","prompt":"为一个将摄氏温度转换为华氏温度的 Python 函数设计实现和 3 个 pytest 测试，覆盖普通值、负值和 0 摄氏度。"}
+{"task_id":"debugging-001","topic":"engineering.debugging","difficulty":"intermediate","expected_verifier":"independent_code_review","prompt":"解释为什么仅凭一条错误日志不能断言根因。给出一个按证据逐步缩小范围的简洁排查流程。"}
+{"task_id":"math-units-001","topic":"mathematics.unit_conversion","difficulty":"basic","expected_verifier":"independent_calculation","prompt":"把 2.5 小时换算成分钟，展示可独立复算的计算式，并指出单位换算中常见的检查方法。"}
+{"task_id":"json-validation-001","topic":"programming.data_validation","difficulty":"intermediate","expected_verifier":"python_unit_test","prompt":"用 Python 标准库解析一行 JSON，并说明如何区分 JSON 语法错误与字段缺失。给出最小可运行示例。"}
+{"task_id":"uncertainty-001","topic":"reasoning.uncertainty","difficulty":"intermediate","expected_verifier":"independent_review","prompt":"用户只说“程序启动失败”，没有提供系统、命令或日志。给出一个有帮助但不编造根因的回答，列出最关键的补充信息。"}
+{"task_id":"planning-001","topic":"reasoning.task_planning","difficulty":"intermediate","expected_verifier":"independent_review","prompt":"设计一个低风险的软件修复流程：先复现问题、保存基线、提出最小修改、运行测试、比较回归结果，并说明每一步产出什么证据。"}
+{"task_id":"knowledge-transfer-001","topic":"reasoning.knowledge_transfer","difficulty":"advanced","expected_verifier":"independent_review","prompt":"解释“缓存可以减少重复计算，但需要一致性策略”这一原则，并分别用一个网页应用和一个本地模型推理的例子说明它如何迁移应用。"}

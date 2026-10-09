@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bslsjdk/aimeng/schemas/task_state.schema.json",
+  "title": "AIMENG Persistent Task State",
+  "type": "object",
+  "required": ["schema_version", "task_id", "state", "resume_state", "budget", "counters", "artifacts", "events", "created_at", "updated_at"],
+  "properties": {
+    "schema_version": { "const": "aimeng.task_state.v1" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "state": { "enum": ["CREATED", "CONTEXT_READY", "EXPLORE", "HYPOTHESIS_READY", "CHECKING", "REVISING", "SOLVED_PENDING_REVIEW", "PLASTIC_TRIAL", "CANDIDATE_EVALUATION", "CONSOLIDATE", "DONE", "FAILED_RECOVERABLE", "ABORTED_BUDGET"] },
+    "resume_state": { "type": ["string", "null"] },
+    "budget": { "type": "object" },
+    "counters": { "type": "object", "required": ["ideas_created", "verification_calls", "plastic_trials"], "properties": { "ideas_created": { "type": "integer", "minimum": 0 }, "verification_calls": { "type": "integer", "minimum": 0 }, "plastic_trials": { "type": "integer", "minimum": 0 } }, "additionalProperties": false },
+    "artifacts": { "type": "array", "items": { "type": "object", "required": ["ref", "sha256", "type", "recorded_at"], "properties": { "ref": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }, "type": { "type": "string", "minLength": 1 }, "recorded_at": { "type": "string", "format": "date-time" } }, "additionalProperties": false } },
+    "events": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["at", "from", "to", "reason", "metadata"], "properties": { "at": { "type": "string", "format": "date-time" }, "from": { "type": ["string", "null"] }, "to": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1 }, "metadata": { "type": "object" } }, "additionalProperties": false } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIMENG Neural Unit Activity Trace",
+  "description": "Append-only record of unit participation, measured costs, and evidence-backed outcome attribution.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "run_id",
+    "timestamp",
+    "model_revision",
+    "task_ref",
+    "unit_id",
+    "unit_revision",
+    "event_type",
+    "participation",
+    "measurements",
+    "attribution"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "aimeng.neuron_activity_trace.v1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "model_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "unit_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "unit_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "event_type": {
+      "enum": [
+        "considered",
+        "activated",
+        "skipped",
+        "deactivated",
+        "replaced",
+        "error",
+        "evaluation"
+      ]
+    },
+    "participation": {
+      "type": "object",
+      "required": [
+        "selected",
+        "reason_code"
+      ],
+      "properties": {
+        "selected": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "enum": [
+            "router_selected",
+            "dependency_required",
+            "budget_limit",
+            "low_score",
+            "health_gate",
+            "manual_test",
+            "not_applicable"
+          ]
+        },
+        "activation_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "active_duration_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurements": {
+      "type": "object",
+      "required": [
+        "latency_ms",
+        "peak_memory_bytes",
+        "input_fingerprint",
+        "output_fingerprint"
+      ],
+      "properties": {
+        "latency_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "peak_memory_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "input_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "activation_summary_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence_before": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "confidence_after": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "attribution": {
+      "type": "object",
+      "required": [
+        "outcome_status",
+        "evidence_ref",
+        "causal_confidence"
+      ],
+      "properties": {
+        "outcome_status": {
+          "enum": [
+            "unknown",
+            "helpful",
+            "harmful",
+            "neutral",
+            "mixed",
+            "not_measured"
+          ]
+        },
+        "evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "causal_confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "counterfactual_run_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

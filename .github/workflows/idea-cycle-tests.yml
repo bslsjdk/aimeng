@@ -1,0 +1,97 @@
+name: Idea Cycle and Plasticity Contracts
+
+on:
+  push:
+    branches: [feat/teacher-knowledge-seed-batch]
+    paths:
+      - "scripts/idea_cycle_state.py"
+      - "scripts/validate_idea_records.py"
+      - "scripts/validate_plastic_module.py"
+      - "scripts/build_correction_feedback.py"
+      - "scripts/validate_correction_trace.py"
+      - "scripts/verify_artifact_integrity.py"
+      - "scripts/validate_neuron_activity_trace.py"
+      - "scripts/single_neuron_lab.py"
+      - "tests/test_single_neuron_lab.py"
+      - "docs/SINGLE_NEURON_LAB.md"
+      - "schemas/core_neuron_unit.schema.json"
+      - "schemas/neuron_activity_trace.schema.json"
+      - "tests/test_neuron_activity_trace.py"
+      - "docs/CORE_NEURON_REPLACEMENT_AND_ACTIVITY_TRACING.md"
+      - "scripts/simulate_parameter_workspace.py"
+      - "schemas/idea_record.schema.json"
+      - "schemas/plastic_module.schema.json"
+      - "schemas/task_state.schema.json"
+      - "schemas/learning_signal.schema.json"
+      - "schemas/correction_trace.schema.json"
+      - "tests/test_idea_records.py"
+      - "tests/test_idea_cycle_state.py"
+      - "tests/test_plastic_module_manifest.py"
+      - "tests/test_correction_feedback.py"
+      - "tests/test_correction_trace.py"
+      - "tests/test_artifact_integrity_verifier.py"
+      - "tests/test_parameter_workspace_simulation.py"
+      - "docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md"
+      - ".github/workflows/idea-cycle-tests.yml"
+  pull_request:
+    paths:
+      - "scripts/idea_cycle_state.py"
+      - "scripts/validate_idea_records.py"
+      - "scripts/validate_plastic_module.py"
+      - "scripts/build_correction_feedback.py"
+      - "scripts/validate_neuron_activity_trace.py"
+      - "schemas/core_neuron_unit.schema.json"
+      - "schemas/neuron_activity_trace.schema.json"
+      - "docs/CORE_NEURON_REPLACEMENT_AND_ACTIVITY_TRACING.md"
+      - "tests/test_neuron_activity_trace.py"
+      - "schemas/idea_record.schema.json"
+      - "schemas/plastic_module.schema.json"
+      - "schemas/task_state.schema.json"
+      - "schemas/learning_signal.schema.json"
+      - "tests/test_idea_records.py"
+      - "tests/test_idea_cycle_state.py"
+      - "tests/test_plastic_module_manifest.py"
+      - "tests/test_correction_feedback.py"
+      - ".github/workflows/idea-cycle-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate JSON schemas parse
+        run: |
+          python -m json.tool schemas/idea_record.schema.json >/dev/null
+          python -m json.tool schemas/plastic_module.schema.json >/dev/null
+          python -m json.tool schemas/task_state.schema.json >/dev/null
+          python -m json.tool schemas/learning_signal.schema.json >/dev/null
+          python -m json.tool schemas/correction_trace.schema.json >/dev/null
+          python -m json.tool schemas/core_neuron_unit.schema.json >/dev/null
+          python -m json.tool schemas/neuron_activity_trace.schema.json >/dev/null
+      - name: Run idea record contract tests
+        run: python -m unittest discover -s tests -p 'test_idea_records.py'
+      - name: Run durable state machine tests
+        run: python -m unittest discover -s tests -p 'test_idea_cycle_state.py'
+
+      - name: Run plastic module manifest gate tests
+        run: python -m unittest discover -s tests -p 'test_plastic_module_manifest.py'
+
+      - name: Run external error-signal feedback tests
+        run: python -m unittest discover -s tests -p 'test_correction_feedback.py'
+      - name: Run correction trace invariant tests
+        run: python -m unittest discover -s tests -p 'test_correction_trace.py'
+      - name: Run neural-unit activity trace tests
+        run: python -m unittest discover -s tests -p 'test_neuron_activity_trace.py'
+      - name: Run single-neuron learning lab tests
+        run: python -m unittest discover -s tests -p 'test_single_neuron_lab.py'
+      - name: Run file-integrity verifier tests
+        run: python -m unittest discover -s tests -p 'test_artifact_integrity_verifier.py'
+      - name: Run dynamic parameter workspace simulation tests
+        run: python -m unittest discover -s tests -p 'test_parameter_workspace_simulation.py'

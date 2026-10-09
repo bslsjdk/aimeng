@@ -132,3 +132,104 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ## 资源感知奖励实验（设计提案）
 
 [资源感知奖励机制](docs/RESOURCE_AWARE_REWARD.md) 记录了“难题解出后给予额外奖励、资源占用扣分”的离线实验方案。难度奖励必须由固定基准模型的重复失败率和独立验证支持；任何硬内存/计算限制都不能被奖励抵消。该文档目前只是研究提案，尚未接入训练器，也没有声称已证明有效。
+
+
+## Ornith -> AIMENG 学生蒸馏基础框架
+
+可执行流程与当前限制见 [蒸馏运行手册](docs/DISTILLATION_RUNBOOK.md)。新增 `scripts/import_teacher_demos.py` 用于导入本地/远程教师生成的 JSONL；导入记录默认全部 pending、unassigned、ineligible。训练入口 `scripts/train_student_sft.py` 已加入 task_id 拆分泄漏检查、assistant-only loss mask、数据 SHA-256 与 run manifest，并兼容常见 Transformers 评估参数版本。CI 检查两批候选数据和关键训练门槛。
+
+**边界仍然重要：**这建立了可验证的通用 Hugging Face causal-LM response-SFT 路径，不代表已经接通 Ornith 自动推理，也不代表 AIMENG 自有非标准学生架构已原生训练。首次真实训练仍需可训练学生 checkpoint、经独立核验并完成拆分的数据，以及一次端到端 smoke test。
+
+
+学生评测与晋级另有可执行入口：`scripts/evaluate_student_sft.py` 在固定 held-out/regression JSONL 上生成可比较指标，`scripts/gate_student_release.py` 只有在质量提升、回归受控和 Android 整应用内存实测通过时才更新版本指针。具体格式与命令见 [蒸馏运行手册](docs/DISTILLATION_RUNBOOK.md)。
+
+
+## 一键训练入口
+
+日常训练请优先使用 [一键学生训练流水线](docs/ONE_COMMAND_TRAINING.md)：`scripts/run_student_pipeline.py` 默认使用 LoRA 进行参数高效微调，并自动预检数据、运行原模型基线评测、执行 SFT、评测候选模型及保存输入快照与分步日志；需要全量微调时显式传入 `--full-finetune`。它会在关键门槛失败时停止，不覆盖已有运行。Android 整应用内存必须另行实测，训练成功不会自动晋级模型。
+
+## 免费 GPU：Ornith 教师生成 → 学生训练
+
+新增 [外部 Agent → 学生训练操作手册](docs/FREE_GPU_ORNITH_TO_STUDENT.md) 与 [元宝 Agent 可续跑批量生成规约](prompts/yuanbao_teacher_batch_agent.md)。优先让元宝等外部 Agent 分批生成 JSONL 候选，将免费 GPU 留给学生训练；规约默认每批 20 条，保存批次文件与 manifest，并严格保持 pending/unassigned/ineligible。官方 Ornith 9B Q4_K_M GGUF + CUDA `llama-server` 仍保留为可选本地教师回退路径，不再要求先用 GPU 生成数据。外部 Agent 生成的答案仍须独立核验，才能进入训练。
+
+
+## 人类式想法与可塑计算研究规格
+
+[人类式思考与可塑性实现规格](docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md)把自由联想、假设展开、自我质疑、独立验证、可恢复任务状态、临时参数适应、外部计算模块库、回滚与分阶段实验写成了可实现契约。方向仍是**单一统一核心模型，不采用 MoE**。该文档是实现规格，不代表动态神经元增长或人类式创造力已经实现；先完成可测试的软件闭环，再逐步实验 adapter 与真正的计算结构增长。
+
+
+首批可执行契约代码已加入同一分支：
+- `schemas/idea_record.schema.json` 与 `scripts/validate_idea_records.py`：想法状态与独立证据门槛。
+- `schemas/plastic_module.schema.json` + `scripts/validate_plastic_module.py`：可塑模块的版本、兼容和晋级契约及可执行验收门。
+- `schemas/task_state.schema.json`：任务检查点格式。
+- `scripts/idea_cycle_state.py`：可恢复的想法任务状态机与原子检查点。
+- `tests/test_idea_records.py`、`tests/test_idea_cycle_state.py`、`tests/test_plastic_module_manifest.py` 和 `.github/workflows/idea-cycle-tests.yml`：自动化契约测试。
+
+这些代码目前建立的是数据/状态基础层，尚未接入真实模型生成、独立验证器或权重训练；以 GitHub Actions 的实际结果为准，不把提交代码等同于测试通过。
+
+
+错误反馈学习闭环的首批实现已加入：schemas/learning_signal.schema.json 定义外部验证信号；scripts/build_correction_feedback.py 将验证结果转换为修正请求；tests/test_correction_feedback.py 与 idea-cycle-tests 工作流覆盖失败修正、未知结果、有限范围内通过以及证据/哈希校验。该层目前只生成结构化反馈，不直接更新模型权重，也不自动晋级记忆。
+
+
+
+
+修正轨迹的第二层契约也已加入同一研究分支：
+- `schemas/correction_trace.schema.json`：记录原始工件、失败信号、错误归因假设、修正工件、复测信号、适用范围与来源。
+- `scripts/validate_correction_trace.py`：检查初始信号是否绑定原始工件哈希；“修正已验证”必须有新工件，并且复测通过且明确针对新工件；不确定/验证器不可用不能晋级为成功。
+- `tests/test_correction_trace.py`：覆盖复测缺失、复测错对象、哈希未变化、不确定结果冒充成功等边界。
+- `docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md` 已补充这些晋级不变量及实现限制；CI 已纳入 schema 解析和测试。
+
+注意：当前验证器检查的是记录之间的一致性，不会自动读取外部工件并计算哈希，也不会证明验证器本身可靠；“不可变轨迹”仍需后续存储层实现追加写入或防篡改链。GitHub Actions 是否通过必须以实际运行结果为准。
+
+
+首个可执行的独立验证器适配器也已加入：`scripts/verify_artifact_integrity.py` 对指定文件计算 SHA-256，并输出 evidence JSON 与 `aimeng.learning_signal.v1` 信号；`tests/test_artifact_integrity_verifier.py` 覆盖匹配、不匹配、非法摘要和文件缺失。它只证明字节完整性，不证明内容正确。运行说明和退出码见 [人类式思考与可塑性规格第 19 节](docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md#19-first-executable-verifier-adapter-file-integrity)。该适配器不会执行待测代码，也不会更新权重或晋级记忆。
+
+
+## 动态参数激活与按需加载（核心研究方向）
+
+新增 [动态参数激活与加载架构规格](docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md)。研究目标不是简单拒绝 MoE，而是让**一个统一核心模型**联合管理可变计算图、动态参数驻留工作集和经过验证的能力扩展。必须分别实验“哪些运算执行”“哪些参数驻留内存”“新增结构是否提升能力”，不能把路由、卸载或增加参数直接当成性能/智能提升。
+
+实现路线按风险递增：状态机与资源预算模拟 → 后端支持的块/层按需加载与实测 → 真正的动态计算激活 → 候选 adapter/子图验证与回滚 → 有证据后再研究更细粒度神经元/连接动态化。Android 整应用峰值 RAM 必须低于 4096 MiB，目标晋级门低于 3800 MiB。当前这份文件是研究规格，不代表参数分页或动态神经元已经实现。
+
+
+首个可执行原型已加入：`scripts/simulate_parameter_workspace.py`，测试位于 `tests/test_parameter_workspace_simulation.py`。它模拟参数单元依赖、驻留字节预算、LRU 淘汰、使用中保护、延迟卸载和加载失败回滚，CI 已加入相应测试。它只是调度逻辑模拟，**不加载真实权重、不释放系统内存，也不证明推理计算量或延迟下降**。示例计划与命令见 [动态参数激活与加载架构规格第 12 节](docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md#12-first-executable-artifact-trace-only-workspace-simulator)。
+
+### External and internal neural units
+
+The same computational-unit contract covers model-learned candidates, human-authored modules, imported compatible units, and structures integrated into a versioned core-model graph. See [External and Internal Neural Units](docs/EXTERNAL_AND_INTERNAL_NEURAL_UNITS.md) for lifecycle states, manifests, loading/integration rules, validation gates, rollback, and the current implementation boundary.
+
+- [Recursive Neural-Unit Training and Growth](docs/RECURSIVE_NEURAL_UNIT_TRAINING_AND_GROWTH.md): seed-unit training, candidate generation, isolated training, validation gates, recursive growth, pruning, and mobile resource limits.
+
+
+## Core neuron replacement and activity evidence
+
+- [Core neuron replacement and activity tracing](docs/CORE_NEURON_REPLACEMENT_AND_ACTIVITY_TRACING.md): stable unit identities, safe single-unit replacement, rollback, and evidence-backed activity records.
+- [Core neuron unit contract](schemas/core_neuron_unit.schema.json): unit location, tensor interfaces, immutable parameter artifact, health, and replacement policy.
+- [Neuron activity trace contract](schemas/neuron_activity_trace.schema.json): append-only participation, resource measurements, and outcome attribution.
+- Validator: `scripts/validate_neuron_activity_trace.py`; tests: `tests/test_neuron_activity_trace.py`.
+
+These are contracts and validation scaffolding, not a working neural-unit runtime. Real tensor-level replacement and causal attribution still require a compatible model architecture, registry, execution backend, and controlled experiments.
+
+
+## 单神经元可训练实验（第一阶段）
+
+- [单神经元实验说明](docs/SINGLE_NEURON_LAB.md)：先验证一个单元的前向计算、局部参数更新、活动追踪、禁用消融和带验证门的独立替换。
+- `scripts/single_neuron_lab.py`：仅使用 Python 标准库的确定性线性神经元实验；默认把训练前后 held-out MSE 与 append-only JSONL 轨迹写入终端和 `runs/`。
+- `tests/test_single_neuron_lab.py`：检查学习是否改善保留集误差、单元禁用、轨迹写入，以及替换候选的接受/拒绝。
+- 这只是可运行的玩具学习器，不是语言模型，不实现双向预测编码，也不证明生物合理性。下一阶段再用多个单元实验显式前向/反馈通路，并与标准反向传播基线比较。
+
+运行：
+
+```bash
+python scripts/single_neuron_lab.py --epochs 60 --learning-rate 0.05 --trace runs/single-neuron-trace.jsonl
+python -m unittest discover -s tests -p 'test_single_neuron_lab.py'
+```
+
+
+## 评分驱动的神经元进退场（第二阶段）
+
+- [评分与活动控制实验说明](docs/NEURON_SCORING_AND_ACTIVITY_CONTROL.md)：把预测贡献、纠错价值与计算成本纳入评分，使用独立的进入/退出阈值控制工作状态。
+- `scripts/neuron_scoring_lab.py`：多个独立线性单元先用给定样本更新参数，再通过 held-out 消融测量边际贡献，记录评分、参数更新和状态变化。
+- `tests/test_neuron_scoring_lab.py` 与 `.github/workflows/neuron-scoring-lab.yml`：检查保留集误差、评分字段、进退场状态切换与边界输入。
+
+这是确定性玩具实验，不是生物神经元或语言模型。当前版本为了避免候选永久饥饿，休眠单元仍会收到训练更新，因此尚未证明真实计算节省；必须以独立 CI 和后续同预算对照实验为准。

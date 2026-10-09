@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bslsjdk/aimeng/schemas/plastic_module.schema.json",
+  "title": "AIMENG Plastic Module Manifest",
+  "type": "object",
+  "required": ["schema_version", "module_id", "module_version", "status", "module_type", "base_model_id", "base_model_revision", "interface_signature", "input_contract", "output_contract", "task_families", "known_limits", "resource_cost", "training_data_fingerprint", "eval_suite_fingerprint", "validation_status", "validated_scope", "artifact_hashes"],
+  "properties": {
+    "schema_version": { "const": "aimeng.plastic_module.v1" },
+    "module_id": { "type": "string", "minLength": 1 },
+    "module_version": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "training", "candidate", "accepted", "deprecated", "rejected"] },
+    "module_type": { "enum": ["adapter", "subgraph", "future_neuron_graph"] },
+    "base_model_id": { "type": "string", "minLength": 1 },
+    "base_model_revision": { "type": "string", "minLength": 1 },
+    "interface_signature": { "type": "string", "minLength": 1 },
+    "input_contract": { "type": "object" },
+    "output_contract": { "type": "object" },
+    "dependencies": { "type": "array", "items": { "type": "string" } },
+    "task_families": { "type": "array", "items": { "type": "string" } },
+    "known_limits": { "type": "array", "items": { "type": "string" } },
+    "resource_cost": { "type": "object", "properties": { "artifact_bytes": { "type": ["integer", "null"], "minimum": 0 }, "peak_ram_mib": { "type": ["number", "null"], "minimum": 0 }, "latency_ms": { "type": ["number", "null"], "minimum": 0 } }, "additionalProperties": true },
+    "training_data_fingerprint": { "type": "string", "minLength": 1 },
+    "eval_suite_fingerprint": { "type": "string", "minLength": 1 },
+    "validation_status": { "enum": ["pending", "pass", "fail", "inconclusive"] },
+    "validated_scope": { "type": "object" },
+    "artifact_hashes": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" } },
+    "eval_report_ref": { "type": ["string", "null"] },
+    "rollback_target": { "type": ["string", "null"] },
+    "created_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "accepted" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "validation_status": { "const": "pass" },
+          "eval_report_ref": { "type": "string", "minLength": 1 },
+          "rollback_target": { "type": "string", "minLength": 1 }
+        },
+        "required": ["eval_report_ref", "rollback_target"]
+      }
+    }
+  ],
+  "additionalProperties": false
+}

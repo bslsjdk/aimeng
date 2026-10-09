@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bslsjdk/aimeng/schemas/correction_trace.schema.json",
+  "title": "AIMENG Immutable Correction Trace",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "trace_id",
+    "task_id",
+    "created_at",
+    "updated_at",
+    "initial_artifact",
+    "initial_signal",
+    "attribution_hypotheses",
+    "correction_artifact",
+    "recheck_signal",
+    "status",
+    "scope",
+    "limitations",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "aimeng.correction_trace.v1"
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "initial_artifact": {
+      "$ref": "#/$defs/artifact"
+    },
+    "initial_signal": {
+      "$ref": "#/$defs/signal"
+    },
+    "attribution_hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "hypothesis",
+          "confidence_label",
+          "evidence_refs"
+        ],
+        "properties": {
+          "hypothesis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence_label": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "disconfirming_test": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "correction_artifact": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recheck_signal": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/signal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "verified_correction",
+        "failed_correction",
+        "inconclusive"
+      ]
+    },
+    "scope": {
+      "type": "object"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "producer",
+        "recorded_from"
+      ],
+      "properties": {
+        "producer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recorded_from": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": [
+        "ref",
+        "sha256",
+        "kind"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "signal": {
+      "type": "object",
+      "required": [
+        "ref",
+        "sha256",
+        "outcome",
+        "target_artifact_sha256",
+        "scope",
+        "evidence_refs"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "inconclusive",
+            "unavailable"
+          ]
+        },
+        "target_artifact_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

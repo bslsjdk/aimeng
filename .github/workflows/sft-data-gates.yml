@@ -1,0 +1,32 @@
+name: AIMENG SFT data gates
+on:
+  pull_request:
+  push:
+    branches: [main, master, feat/neuro-inspired-bounded-runtime, feat/teacher-knowledge-seed-batch]
+jobs:
+  sft-data-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate candidate batch 01 structure
+        run: python scripts/validate_sft_candidates.py --input data/teacher_seed/sft_candidates.jsonl
+      - name: Validate candidate batch 02 structure
+        run: python scripts/validate_sft_candidates.py --input data/teacher_seed/sft_candidates_batch02.jsonl
+      - name: Test SFT eligibility, import, split and loss-mask gates
+        run: python -m unittest discover -s tests -p 'test_train_student_sft.py' -v
+      - name: Test student evaluation suite
+        run: python -m unittest discover -s tests -p 'test_evaluate_student_sft.py' -v
+      - name: Test release promotion gate
+        run: python -m unittest discover -s tests -p 'test_gate_student_release.py' -v
+      - name: Test Ornith teacher demo generator helpers
+        run: python -m unittest discover -s tests -p 'test_generate_ornith_teacher_demos.py' -v
+      - name: Test importer, trainer and release-gate command-line help
+        run: |
+          python scripts/import_teacher_demos.py --help
+          python scripts/train_student_sft.py --help
+          python scripts/evaluate_student_sft.py --help
+          python scripts/gate_student_release.py --help
+          python scripts/run_student_pipeline.py --help
