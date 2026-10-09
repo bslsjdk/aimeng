@@ -23,12 +23,24 @@ runtime_constraints:
   allow_router_to_disable_safety_limit: false
 
 routing:
-  first_experiment: structured_ffn_channel_groups
-  group_size: 128
-  candidate_pool_schedule: [0.125, 0.25, 0.5, 0.75, 1.0]
+  # Phase 1 uses only real backend controls; channel skipping is deferred until proven.
+  first_experiment: dynamic_budget_parameter_sweep
+  enabled_actions:
+    - n_ctx
+    - max_tokens
+    - threads
+    - concurrency
+    - n_batch
   expansion_on_uncertainty: true
   fallback_to_full_path_if_quality_gate_fails: true
-  never_assume_skipped_channels_reduce_memory_without_backend_measurement: true
+  full_path_requires_resource_safety: true
+  abort_if_no_safe_path: true
+  structured_ffn_channel_groups:
+    enabled: false
+    group_size: null
+    candidate_pool_schedule: [0.125, 0.25, 0.5, 0.75, 1.0]
+    require_verified_backend_skip: true
+    never_assume_skipped_channels_reduce_memory_without_backend_measurement: true
 
 reward:
   quality_gate_required: true
