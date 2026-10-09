@@ -217,8 +217,11 @@ def main() -> int:
     parser.add_argument("--model", required=True, help="Path to the local GGUF file")
     parser.add_argument("--tasks", required=True, help="JSONL task file; one task per line")
     parser.add_argument("--output", default="data/telemetry.jsonl")
-    parser.add_argument("--append", action="store_true",
-                        help="Append to an existing JSONL file; avoid for ordinary reruns to prevent accidental duplicate trials")
+    output_mode = parser.add_mutually_exclusive_group()
+    output_mode.add_argument("--append", action="store_true",
+                             help="Append and intentionally repeat every selected task/budget trial")
+    output_mode.add_argument("--resume", action="store_true",
+                             help="Resume an existing file, skipping task/budget runs already completed")
     parser.add_argument("--llama-cli", default=os.environ.get("LLAMA_CLI", "llama-cli"))
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--threads", type=int, default=4)
