@@ -169,3 +169,14 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 
 错误反馈学习闭环的首批实现已加入：schemas/learning_signal.schema.json 定义外部验证信号；scripts/build_correction_feedback.py 将验证结果转换为修正请求；tests/test_correction_feedback.py 与 idea-cycle-tests 工作流覆盖失败修正、未知结果、有限范围内通过以及证据/哈希校验。该层目前只生成结构化反馈，不直接更新模型权重，也不自动晋级记忆。
+
+
+
+
+修正轨迹的第二层契约也已加入同一研究分支：
+- `schemas/correction_trace.schema.json`：记录原始工件、失败信号、错误归因假设、修正工件、复测信号、适用范围与来源。
+- `scripts/validate_correction_trace.py`：检查初始信号是否绑定原始工件哈希；“修正已验证”必须有新工件，并且复测通过且明确针对新工件；不确定/验证器不可用不能晋级为成功。
+- `tests/test_correction_trace.py`：覆盖复测缺失、复测错对象、哈希未变化、不确定结果冒充成功等边界。
+- `docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md` 已补充这些晋级不变量及实现限制；CI 已纳入 schema 解析和测试。
+
+注意：当前验证器检查的是记录之间的一致性，不会自动读取外部工件并计算哈希，也不会证明验证器本身可靠；“不可变轨迹”仍需后续存储层实现追加写入或防篡改链。GitHub Actions 是否通过必须以实际运行结果为准。
