@@ -17,7 +17,10 @@ jobs:
         run: python scripts/validate_sft_candidates.py --input data/teacher_seed/sft_candidates_batch02.jsonl
       - name: Test SFT eligibility, import, split and loss-mask gates
         run: python -m unittest discover -s tests -p 'test_train_student_sft.py' -v
-      - name: Test importer and trainer command-line help
+      - name: Test release promotion gate
+        run: python -m unittest discover -s tests -p 'test_gate_student_release.py' -v
+      - name: Test importer, trainer and release-gate command-line help
         run: |
           python scripts/import_teacher_demos.py --help
           python scripts/train_student_sft.py --help
+          python scripts/gate_student_release.py --help
