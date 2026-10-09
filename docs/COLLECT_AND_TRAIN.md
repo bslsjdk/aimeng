@@ -48,6 +48,39 @@ python scripts/evaluate_budget_controller.py --input data/telemetry.jsonl --mode
 第一版 MLP 是研究基线，不是生产策略。训练完成后运行 `scripts/evaluate_budget_controller.py`，在独立 test split 上对比控制器预测、固定 full-budget 的质量通过率、平均延迟与可用 PSS。测试对必须足够且可客观评分；上线前仍需在目标设备上复验失败/回退率与资源硬限制。采集器的 PSS 采样、命令行选项和后端能力需要在目标环境验证；schema 通过不代表数据真实或模型加速。
 
 
+
+## 5. 任务内在线适应决策器（首版）
+
+当前新增的 `scripts/online_adaptation.py` 只根据一轮推理的结构化观测，决定停止或建议升一档预算。它是独立、可测试的策略模块，不会自行启动模型，也不会更新 GGUF、LoRA 或全局控制器。
+
+准备一个观测文件，例如 `runs/observation.json`：
+
+```json
+{
+  "budget": "small",
+  "quality_label": "fail",
+  "status": "completed",
+  "whole_app_pss_mib": 2500
+}
+```
+
+运行：
+
+```bash
+python scripts/online_adaptation.py --input runs/observation.json
+```
+
+决策规则：
+
+- 独立验证器给出 `pass`：停止本任务。
+- 给出 `fail`，且整应用 PSS 有实测值并低于默认软门槛 3584 MiB：建议从 small 升到 medium，或从 medium 升到 full。
+- PSS 缺失、质量为 `unknown`、超时、OOM 或执行失败：不盲目增加预算。
+- 达到 4096 MiB 硬限制：立即输出内存违规停止决策；安全约束不能被质量奖励覆盖。
+- full 预算仍失败：停止并记录失败，不无限循环。
+- 所有决策都将 `persistent_update` 设为 false；跨任务的持久学习仍须经过数据审核、离线训练、独立测试和版本回滚门槛。
+
+**重要：** `whole_app_pss_mib` 必须来自目标 Android 上对整个应用进程/进程组的真实测量。采集器记录的 llama-cli 子进程 PSS 不能冒充整个 Android 应用的 PSS。该脚本当前是策略原型，尚未接入实际推理执行器；单元测试通过也不代表已验证真实加速或手机内存安全。
+
 ## GPU offload 与预测
 
 - 默认 `--gpu-layers 0`，不声称使用 GPU。只有确认 `llama-cli` 是 CUDA 构建且日志显示层已 offload 后，才传 `--gpu-layers 99 --accelerator CUDA-T4`；这两个参数只表达请求/环境标签，实际 offload 仍要看后端日志。
