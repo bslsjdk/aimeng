@@ -31,7 +31,7 @@ python scripts/collect_budget_traces.py \
   --max-tasks 3
 ```
 
-每个任务会依次跑 small/medium/full 三档。默认重写指定输出文件，避免把重复试跑悄悄混进一份训练集；如需多次重复实验，应使用不同输出文件并在整理阶段明确合并。采集器记录端到端耗时，并尝试从 Linux `/proc/<pid>/smaps_rollup` 采样子进程 PSS。后端实际生效的上下文、TTFT、token/s、GPU 显存目前没有可靠的通用 CLI 解析接口，因此保持 null；不能用估算或空格分词冒充真实 token 数。第一次只建议用少量任务检查流程。
+每个任务会依次跑 small/medium/full 三档。默认重写指定输出文件，避免把重复试跑悄悄混进一份训练集；如需多次重复实验，应使用不同输出文件并在整理阶段明确合并。采集器默认覆盖输出文件（可显式传 `--append` 追加），避免重复运行时悄悄混入重复任务。采集器记录端到端耗时，并尝试从 Linux `/proc/<pid>/status` 与 `/proc/<pid>/smaps_rollup` 采样子进程 RSS/PSS。后端实际生效的上下文、TTFT、token/s、GPU 显存目前没有可靠的通用 CLI 解析接口，因此保持 null；不能用估算或空格分词冒充真实 token 数。第一次只建议用少量任务检查流程。
 
 预算值（1024/2048/4096 context 与 128/256/512 max tokens）是可配置的实验档位，不保证适合所有模型、设备或内存约束。手机实验必须单独校准，且整应用峰值 RAM 不得超过 4096 MiB。不要把 Colab GPU 的内存结果代替 Android 测量。
 
