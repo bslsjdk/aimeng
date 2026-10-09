@@ -197,3 +197,5 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ### External and internal neural units
 
 The same computational-unit contract covers model-learned candidates, human-authored modules, imported compatible units, and structures integrated into a versioned core-model graph. See [External and Internal Neural Units](docs/EXTERNAL_AND_INTERNAL_NEURAL_UNITS.md) for lifecycle states, manifests, loading/integration rules, validation gates, rollback, and the current implementation boundary.
+
+- [Recursive Neural-Unit Training and Growth](docs/RECURSIVE_NEURAL_UNIT_TRAINING_AND_GROWTH.md): seed-unit training, candidate generation, isolated training, validation gates, recursive growth, pruning, and mobile resource limits.
