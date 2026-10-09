@@ -235,6 +235,8 @@ def main() -> int:
             r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout,
             target_modules="all-linear", task_type="CAUSAL_LM"
         ))
+        if args.gradient_checkpointing and hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
         model.print_trainable_parameters()
     if args.gradient_checkpointing:
         if not hasattr(model, "gradient_checkpointing_enable"):
