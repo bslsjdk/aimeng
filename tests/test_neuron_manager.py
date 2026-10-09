@@ -131,7 +131,7 @@ class NeuronManagerTests(unittest.TestCase):
             '{"input":[0.0],"target":1.0}\n'
             '{"input":[1.0],"target":3.0}\n', encoding="utf-8")
         result = manager.run(self.args("evaluate", ids=["N-001", "N-003"],
-                                       dataset=str(dataset), good_mse_threshold=0.05))
+                                       dataset=str(dataset), good_mse_threshold=0.05, reject_above_mse=10.0, snapshot_dir=str(self.root / "snapshots")))
         self.assertTrue(result["ok"])
         scores = {row["id"]: row for row in result["results"]}
         self.assertEqual(scores["N-001"]["quality"], "excellent")
@@ -139,6 +139,25 @@ class NeuronManagerTests(unittest.TestCase):
         self.assertEqual(scores["N-003"]["quality"], "candidate")
         data = json.loads(self.registry.read_text(encoding="utf-8"))
         self.assertEqual(next(n for n in data["neurons"] if n["id"] == "N-001")["quality"], "excellent")
+        self.assertTrue(Path(scores["N-001"]["snapshot"]).is_file())
+        self.assertTrue((self.root / "snapshots" / "excellent" / "N-001" / "manifest.json").is_file())
+
+    def test_bad_neuron_is_disabled_and_archived_without_deletion(self):
+        dataset = self.root / "heldout-bad.jsonl"
+        dataset.write_text(
+            '{"input":[-1.0],"target":-1.0}\\n'
+            '{"input":[0.0],"target":1.0}\\n'
+            '{"input":[1.0],"target":3.0}\\n', encoding="utf-8")
+        result = manager.run(self.args("evaluate", ids=["N-003"], dataset=str(dataset),
+                                       good_mse_threshold=0.05, reject_above_mse=1.0,
+                                       snapshot_dir=str(self.root / "snapshots")))
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["results"][0]["quality"], "rejected")
+        data = json.loads(self.registry.read_text(encoding="utf-8"))
+        bad = next(n for n in data["neurons"] if n["id"] == "N-003")
+        self.assertFalse(bad["enabled"])
+        self.assertTrue(Path(bad["last_saved_snapshot"]).is_file())
+        self.assertTrue((self.root / "snapshots" / "rejected" / "N-003" / "manifest.json").is_file())
 
     def test_changed_artifact_hash_is_rejected_and_logged(self):
         self.a.write_text('{"format":"aimeng.linear_neuron.v1","weights":[999],"bias":0}', encoding="utf-8")
