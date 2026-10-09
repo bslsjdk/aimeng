@@ -73,6 +73,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
         "-t", str(budget["threads"]), "--no-display-prompt", "--no-warmup",
     ]
     start = time.monotonic()
+    rss_peak: float | None = None
     pss_peak: float | None = None
     output = ""
     error_text = ""
@@ -83,7 +84,9 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
                                    text=True, encoding="utf-8", errors="replace")
         deadline = start + timeout_s
         while process.poll() is None:
-            current_pss = read_pss_mib(process.pid)
+            current_rss, current_pss = read_process_memory_mib(process.pid)
+            if current_rss is not None:
+                rss_peak = max(rss_peak or 0.0, current_rss)
             if current_pss is not None:
                 pss_peak = max(pss_peak or 0.0, current_pss)
             if time.monotonic() >= deadline:
@@ -173,7 +176,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
             "latency_p95_ms": None,
         },
         "memory": {
-            "process_peak_rss_mib": None,
+            "process_peak_rss_mib": rss_peak,
             "process_peak_pss_mib": pss_peak,
             "backend_buffer_peak_mib": None,
             "kv_cache_estimated_mib": None,
