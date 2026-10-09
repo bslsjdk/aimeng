@@ -166,3 +166,6 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 - `tests/test_idea_records.py`、`tests/test_idea_cycle_state.py`、`tests/test_plastic_module_manifest.py` 和 `.github/workflows/idea-cycle-tests.yml`：自动化契约测试。
 
 这些代码目前建立的是数据/状态基础层，尚未接入真实模型生成、独立验证器或权重训练；以 GitHub Actions 的实际结果为准，不把提交代码等同于测试通过。
+
+
+错误反馈学习闭环的首批实现已加入：schemas/learning_signal.schema.json 定义外部验证信号；scripts/build_correction_feedback.py 将验证结果转换为修正请求；tests/test_correction_feedback.py 与 idea-cycle-tests 工作流覆盖失败修正、未知结果、有限范围内通过以及证据/哈希校验。该层目前只生成结构化反馈，不直接更新模型权重，也不自动晋级记忆。
