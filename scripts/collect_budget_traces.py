@@ -275,6 +275,8 @@ def main() -> int:
         parser.error("--model-sha256 must contain 64 hexadecimal characters")
     if args.dataset_sha256 is not None and not re.fullmatch(r"[0-9a-fA-F]{64}", args.dataset_sha256):
         parser.error("--dataset-sha256 must contain 64 hexadecimal characters")
+    if args.resume and (not args.model_sha256 or not args.dataset_sha256):
+        parser.error("--resume requires both --model-sha256 and --dataset-sha256")
     for task in tasks:
         task["model_sha256"] = args.model_sha256
         task["dataset_snapshot_sha256"] = args.dataset_sha256
