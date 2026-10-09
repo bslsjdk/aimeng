@@ -27,7 +27,14 @@ class GateTests(unittest.TestCase):
         row=self.row("a"); row["verification"]["evidence"]=[]
         p=self.write([row])
         with self.assertRaisesRegex(ValueError,"evidence"): load_records(p,"train")
-    def test_teacher_import_never_auto_approves(self):
+
+    def test_prompt_schema_is_demoted_even_if_input_claims_verified(self):
+        source={"schema_version":"aimeng.sft_candidate.v1","sample_id":"teacher-output-1","task_id":"t2","topic":"python.exceptions","difficulty":"basic","expected_verifier":"python_unit_test","messages":[{"role":"user","content":"Q"},{"role":"assistant","content":"A"}],"verification":{"status":"verified","method":"teacher-self-check","evidence":["teacher said so"]},"split":"train","training_eligible":True}
+        candidate=convert(source,2,teacher_model="Ornith-1.5-9B",prompt_version="teacher_sft_batch_v1")
+        self.assertEqual(candidate["verification"]["status"],"pending")
+        self.assertFalse(candidate["training_eligible"])
+        self.assertEqual(candidate["split"],"unassigned")
+\n    def test_teacher_import_never_auto_approves(self):
         candidate=convert({"schema_version":"aimeng.teacher_demo.v1","task_id":"t1","topic":"python","prompt":"Explain","response":"Answer","teacher":{"model":"Ornith-1.5-9B","prompt_version":"v1"}},1)
         self.assertEqual(candidate["verification"]["status"],"pending")
         self.assertFalse(candidate["training_eligible"])
