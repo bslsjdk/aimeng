@@ -180,3 +180,6 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 - `docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md` 已补充这些晋级不变量及实现限制；CI 已纳入 schema 解析和测试。
 
 注意：当前验证器检查的是记录之间的一致性，不会自动读取外部工件并计算哈希，也不会证明验证器本身可靠；“不可变轨迹”仍需后续存储层实现追加写入或防篡改链。GitHub Actions 是否通过必须以实际运行结果为准。
+
+
+首个可执行的独立验证器适配器也已加入：`scripts/verify_artifact_integrity.py` 对指定文件计算 SHA-256，并输出 evidence JSON 与 `aimeng.learning_signal.v1` 信号；`tests/test_artifact_integrity_verifier.py` 覆盖匹配、不匹配、非法摘要和文件缺失。它只证明字节完整性，不证明内容正确。运行说明和退出码见 [人类式思考与可塑性规格第 19 节](docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md#19-first-executable-verifier-adapter-file-integrity)。该适配器不会执行待测代码，也不会更新权重或晋级记忆。
