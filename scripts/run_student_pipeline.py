@@ -43,6 +43,10 @@ def main() -> int:
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--gradient-checkpointing", action="store_true")
+    parser.add_argument("--full-finetune", action="store_true", help="Train all model weights; default is LoRA for lower compute and optimizer memory")
+    parser.add_argument("--lora-r", type=int, default=8)
+    parser.add_argument("--lora-alpha", type=int, default=16)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
     args = parser.parse_args()
 
@@ -50,6 +54,8 @@ def main() -> int:
         parser.error("epochs/lr must be positive and batch-size/grad-accum must be >= 1")
     if args.max_length < 16 or args.max_new_tokens < 1:
         parser.error("max-length must be >= 16 and max-new-tokens must be >= 1")
+    if args.lora_r < 1 or args.lora_alpha < 1 or not 0 <= args.lora_dropout < 1:
+        parser.error("invalid LoRA configuration")
 
     source_data = Path(args.data).expanduser().resolve()
     source_heldout = Path(args.heldout).expanduser().resolve()
@@ -93,8 +99,11 @@ def main() -> int:
             "--data", str(data), "--model", args.model, "--output", str(output / "student"),
             "--epochs", str(args.epochs), "--lr", str(args.lr),
             "--batch-size", str(args.batch_size), "--grad-accum", str(args.grad_accum),
-            "--max-length", str(args.max_length), "--seed", str(args.seed), "--dry-run"
+            "--max-length", str(args.max_length), "--seed", str(args.seed)
         ]
+        if not args.full_finetune:
+            trainer.extend(["--lora", "--lora-r", str(args.lora_r), "--lora-alpha", str(args.lora_alpha), "--lora-dropout", str(args.lora_dropout)])
+        trainer.append("--dry-run")
         if args.gradient_checkpointing:
             trainer.append("--gradient-checkpointing")
         run_step("Training preflight (no weights loaded)", trainer, logs / "02_preflight.log")
@@ -107,7 +116,7 @@ def main() -> int:
             "--model", args.model, "--model-version", "baseline", "--output", str(output / "baseline_metrics.json"),
             *common_eval
         ], logs / "03_baseline_eval.log")
-        trainer[trainer.index("--dry-run"):] = []
+        trainer.remove("--dry-run")
         run_step("Student SFT training", trainer, logs / "04_train.log")
         run_step("Candidate evaluation", [
             sys.executable, str(ROOT / "scripts/evaluate_student_sft.py"),
