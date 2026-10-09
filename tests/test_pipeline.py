@@ -65,6 +65,18 @@ class TrainingTargetTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(examples, [])
 
+    def test_repeated_budget_runs_require_reliable_pass_rate(self):
+        rows = [
+            self.make_record("small", "pass"),
+            self.make_record("small", "fail"),
+            self.make_record("medium", "pass"),
+            self.make_record("full", "pass"),
+        ]
+        examples, errors = trainer.group_records(rows)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(examples), 1)
+        self.assertEqual(examples[0]["target"], "medium")
+
 
 class TelemetryValidatorTests(unittest.TestCase):
     def base_record(self):
