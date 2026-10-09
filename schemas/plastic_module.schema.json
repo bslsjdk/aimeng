@@ -32,9 +32,12 @@
     {
       "if": { "properties": { "status": { "const": "accepted" } }, "required": ["status"] },
       "then": {
-        "properties": { "validation_status": { "const": "pass" } },
-        "required": ["eval_report_ref", "rollback_target"],
-        "properties": { "eval_report_ref": { "type": "string", "minLength": 1 }, "rollback_target": { "type": "string", "minLength": 1 } }
+        "properties": {
+          "validation_status": { "const": "pass" },
+          "eval_report_ref": { "type": "string", "minLength": 1 },
+          "rollback_target": { "type": "string", "minLength": 1 }
+        },
+        "required": ["eval_report_ref", "rollback_target"]
       }
     }
   ],
