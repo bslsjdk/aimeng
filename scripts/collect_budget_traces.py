@@ -242,6 +242,8 @@ def main() -> int:
     parser.add_argument("--accelerator", default="unknown",
                         help="Declared build/runtime accelerator, e.g. CUDA-T4 or CPU; do not guess")
     parser.add_argument("--max-tasks", type=int, default=0, help="Optional smoke-test task limit")
+    parser.add_argument("--strategy-memory", default=None,
+                        help="Optional JSONL of verifier-gated experiences; enables adaptive reasoning prompts")
     args = parser.parse_args()
 
     if not Path(args.model).is_file():
@@ -308,18 +310,56 @@ def main() -> int:
                         and old.get("task_id") is not None
                         and old.get("budget", {}).get("budget_id") is not None):
                     completed_keys.add((str(old["task_id"]), str(old["budget"]["budget_id"])))
+    strategy_api = None
+    if args.strategy_memory:
+        # Keep the optional learner isolated from the default baseline path.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        try:
+            from experience_learning import load_experiences, choose_strategy, build_prompt, append_experience
+            strategy_api = (load_experiences, choose_strategy, build_prompt, append_experience)
+            load_experiences(args.strategy_memory)
+        except (ImportError, OSError, ValueError) as exc:
+            parser.error(f"cannot load strategy memory: {exc}")
+
     mode = "a" if (args.append or args.resume) else "w"
     written = 0
     skipped = 0
     with output_path.open(mode, encoding="utf-8") as out:
         for index, task in enumerate(tasks, 1):
+            run_task = dict(task)
+            selected_strategy = "direct"
+            if strategy_api:
+                load_experiences, choose_strategy, build_prompt, append_experience = strategy_api
+                decision = choose_strategy(
+                    str(task.get("task_family", "unknown")),
+                    load_experiences(args.strategy_memory),
+                )
+                selected_strategy = decision["strategy"]
+                # Hold the strategy fixed across this task's budget sweep.
+                run_task["prompt"] = build_prompt(str(task["prompt"]), selected_strategy)
             for budget in budget_set:
                 key = (str(task["task_id"]), str(budget["budget_id"]))
                 if args.resume and key in completed_keys:
                     skipped += 1
                     continue
-                record = run_one(cli, args.model, task, budget, args.timeout,
+                record = run_one(cli, args.model, run_task, budget, args.timeout,
                                  args.device_class, args.accelerator)
+                record["routing"]["reasoning_strategy"] = selected_strategy
+                record["routing"]["strategy_memory_enabled"] = bool(strategy_api)
+                if strategy_api and record["result"]["status"] == "completed" and record["result"]["quality_verifier"] != "none":
+                    try:
+                        append_experience(
+                            args.strategy_memory,
+                            task_id=str(task["task_id"]),
+                            task_family=str(task.get("task_family", "unknown")),
+                            strategy=selected_strategy,
+                            quality_label=record["result"]["quality_label"],
+                            verifier=record["result"]["quality_verifier"],
+                            latency_ms=record["performance"]["total_latency_ms"],
+                            prompt=str(task["prompt"]),
+                        )
+                    except (OSError, ValueError) as exc:
+                        print(f"warning: could not persist experience: {exc}", file=sys.stderr)
                 out.write(json.dumps(record, ensure_ascii=False) + "\n")
                 out.flush()
                 written += 1
