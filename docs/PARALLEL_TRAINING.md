@@ -18,7 +18,9 @@ Example:
 
     python scripts/parallel_training.py --plan examples/parallel-training-plan.example.json --dry-run
 
-The example commands in that plan are placeholders. Replace them with real training entry points and valid configuration paths before launching actual training.
+python scripts/parallel_training.py --plan examples/parallel-training-plan.example.json --report runs/parallel/report.json
+
+The example plan now invokes scripts/toy_train.py, a dependency-free logistic-regression smoke test that trains two different tiny models and writes separate checkpoints. Run it to validate the scheduler end to end. It is deliberately not a language model; replace it with real model-training entry points only after the smoke test passes.
 
 ## Resource and correctness limits
 
