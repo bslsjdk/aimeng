@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import tempfile
+import sys
 import unittest
 from pathlib import Path
 
@@ -53,5 +54,28 @@ class PlanTests(unittest.TestCase):
             self.assertEqual({item["status"] for item in report["results"]},{"passed"})
             self.assertIn("a",(root/"a"/"training.log").read_text(encoding="utf-8"))
             self.assertIn("b",(root/"b"/"training.log").read_text(encoding="utf-8"))
+
+
+    def test_parallel_toy_training_saves_independent_checkpoints(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trainer = str(ROOT / "scripts" / "toy_train.py")
+            jobs = [
+                parallel.Job("reasoning", (sys.executable, trainer, "--task", "reasoning",
+                    "--steps", "80", "--seed", "17", "--output", str(root / "model_reasoning")),
+                    128, root / "logs_reasoning"),
+                parallel.Job("tool_use", (sys.executable, trainer, "--task", "tool_use",
+                    "--steps", "80", "--seed", "29", "--output", str(root / "model_tool_use")),
+                    128, root / "logs_tool_use"),
+            ]
+            report = parallel.run_plan(jobs, 256, 2)
+            self.assertEqual(report["status"], "passed")
+            first = json.loads((root / "model_reasoning" / "checkpoint.json").read_text(encoding="utf-8"))
+            second = json.loads((root / "model_tool_use" / "checkpoint.json").read_text(encoding="utf-8"))
+            self.assertEqual(first["task"], "reasoning")
+            self.assertEqual(second["task"], "tool_use")
+            self.assertLess(first["final_validation_loss"], first["initial_validation_loss"])
+            self.assertLess(second["final_validation_loss"], second["initial_validation_loss"])
+            self.assertNotEqual(first["weights"], second["weights"])
 
 if __name__ == "__main__": unittest.main()
