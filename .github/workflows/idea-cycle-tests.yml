@@ -11,6 +11,9 @@ on:
       - "scripts/validate_correction_trace.py"
       - "scripts/verify_artifact_integrity.py"
       - "scripts/validate_neuron_activity_trace.py"
+      - "scripts/single_neuron_lab.py"
+      - "tests/test_single_neuron_lab.py"
+      - "docs/SINGLE_NEURON_LAB.md"
       - "schemas/core_neuron_unit.schema.json"
       - "schemas/neuron_activity_trace.schema.json"
       - "tests/test_neuron_activity_trace.py"
@@ -86,6 +89,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_correction_trace.py'
       - name: Run neural-unit activity trace tests
         run: python -m unittest discover -s tests -p 'test_neuron_activity_trace.py'
+      - name: Run single-neuron learning lab tests
+        run: python -m unittest discover -s tests -p 'test_single_neuron_lab.py'
       - name: Run file-integrity verifier tests
         run: python -m unittest discover -s tests -p 'test_artifact_integrity_verifier.py'
       - name: Run dynamic parameter workspace simulation tests
