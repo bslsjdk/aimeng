@@ -82,21 +82,28 @@ def group_records(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
         env = records[0].get("environment", {})
         labels = [budget_label(r) for r in records]
         labels_seen = {label for label in labels if label}
-        if labels_seen != set(LABELS) or any(label is None for label in labels) or len(labels) != 3 or len(set(labels)) != 3:
-            errors.append(f"task {task_id} must have exactly one small, one medium, and one full run; got {labels}")
+        if labels_seen != set(LABELS) or any(label is None for label in labels):
+            errors.append(f"task {task_id} must contain small, medium, and full budget runs; got {labels}")
             continue
-        valid = []
-        for record in records:
-            result = record.get("result", {})
-            if result.get("status") == "completed" and result.get("quality_label") in {"pass", "fail"}:
-                label = budget_label(record)
-                if label:
-                    valid.append((BUDGET_ORDER[label], label, record))
-        passing = [item for item in valid if item[2].get("result", {}).get("quality_label") == "pass"]
-        if not passing:
-            # A task where all budgets failed/unknown supplies no safe budget target.
+        # Multiple repeats per budget are allowed. A budget is eligible only if every
+        # run has an objective pass/fail label and its measured pass rate meets the gate.
+        parser_pass_rate = 0.95
+        eligible = []
+        for label in LABELS:
+            runs = [r for r in records if budget_label(r) == label]
+            outcomes = []
+            for run in runs:
+                result = run.get("result", {})
+                if result.get("status") != "completed" or result.get("quality_label") not in {"pass", "fail"}:
+                    outcomes = []
+                    break
+                outcomes.append(result["quality_label"] == "pass")
+            if outcomes and sum(outcomes) / len(outcomes) >= parser_pass_rate:
+                eligible.append(label)
+        if not eligible:
+            # A task where no budget reliably passes supplies no safe target.
             continue
-        target = min(passing, key=lambda item: item[0])[1]
+        target = min(eligible, key=lambda label: BUDGET_ORDER[label])
         perf = records[0].get("task", {})
         examples.append({
             "task_id": task_id,
