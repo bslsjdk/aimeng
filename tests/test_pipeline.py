@@ -137,6 +137,14 @@ class OnlineAdaptationTests(unittest.TestCase):
         self.assertIsNone(decision["next_budget"])
 
 
+    def test_non_finite_memory_measurement_is_rejected(self):
+        with self.assertRaises(ValueError):
+            adaptation.decide_next_action({
+                "budget": "small", "quality_label": "fail", "status": "completed",
+                "whole_app_pss_mib": float("nan"),
+            })
+
+
 class TelemetryValidatorTests(unittest.TestCase):
     def base_record(self):
         return {
