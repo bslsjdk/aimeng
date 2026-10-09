@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,10 +36,15 @@ def decide_next_action(
     if status not in {"completed", "failed", "timeout", "oom", "cancelled"}:
         raise ValueError("unsupported status")
     if pss is not None and (
-        isinstance(pss, bool) or not isinstance(pss, (int, float)) or pss < 0
+        isinstance(pss, bool) or not isinstance(pss, (int, float))
+        or not math.isfinite(pss) or pss < 0
     ):
-        raise ValueError("whole_app_pss_mib must be null or a non-negative number")
-    if hard_limit_mib <= 0 or safety_margin_mib < 0 or safety_margin_mib >= hard_limit_mib:
+        raise ValueError("whole_app_pss_mib must be null or a finite non-negative number")
+    if (
+        not math.isfinite(hard_limit_mib) or not math.isfinite(safety_margin_mib)
+        or hard_limit_mib <= 0 or safety_margin_mib < 0
+        or safety_margin_mib >= hard_limit_mib
+    ):
         raise ValueError("invalid memory limit or safety margin")
 
     base = {
