@@ -175,16 +175,40 @@ def run(args: argparse.Namespace) -> dict:
     run_id = str(uuid.uuid4())
     command = args.command
     try:
-        data = read_registry(registry_path)
+        if command == "import" and not registry_path.exists():
+            data = {"schema_version": REGISTRY_SCHEMA, "neurons": []}
+        else:
+            data = read_registry(registry_path)
         ids = getattr(args, "ids", None) or []
-        neurons = selected_neurons(data, ids) if command != "list" else data["neurons"]
+        neurons = selected_neurons(data, ids) if command not in ("list", "import") else data["neurons"] if command == "list" else []
         results: list[dict] = []
 
-        if command == "list":
+        if command == "import":
+            unit_id = args.id.strip()
+            if not unit_id:
+                raise ManagerError("导入 ID 不能为空")
+            if any(n["id"] == unit_id for n in data["neurons"]):
+                raise ManagerError(f"神经元 ID 已存在：{unit_id}")
+            source = Path(args.artifact).resolve()
+            if not source.is_file():
+                raise ManagerError(f"待导入工件不存在：{source}")
+            validate_linear_artifact(source)
+            data["neurons"].append({
+                "id": unit_id, "revision": args.revision, "artifact": str(source),
+                "sha256": sha256_file(source), "enabled": True, "quality": "unassessed",
+                "created_at_unix": time.time(), "origin": "user_import"
+            })
+            write_registry(registry_path, data)
+            results = [{"id": unit_id, "status": "imported", "artifact": str(source),
+                        "sha256": sha256_file(source), "quality": "unassessed"}]
+        elif command == "list":
             results = [{"id": n["id"], "enabled": bool(n.get("enabled", True)),
                         "quality": n.get("quality", "unassessed"),
                         "artifact": n.get("artifact", "")} for n in neurons]
         elif command in ("enable", "disable"):
+            # Validate every selected artifact before changing any record.
+            for neuron in neurons:
+                resolve_artifact(root, neuron)
             enabled = command == "enable"
             for neuron in neurons:
                 neuron["enabled"] = enabled
@@ -269,6 +293,10 @@ def parser_for() -> argparse.ArgumentParser:
     parser.add_argument("--log", default="runs/neuron-manager.jsonl")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="列出真实注册表中的神经元；不生成示例项")
+    imp = sub.add_parser("import", help="导入真实神经元工件；不会生成占位模型")
+    imp.add_argument("--id", required=True)
+    imp.add_argument("--artifact", required=True, help=f"真实 JSON 工件，格式为 {ARTIFACT_FORMAT}")
+    imp.add_argument("--revision", type=int, default=1)
     for name in ("save", "export", "enable", "disable", "evaluate"):
         child = sub.add_parser(name)
         child.add_argument("--ids", nargs="+", required=True, help="明确指定要操作的真实神经元 ID")
@@ -282,8 +310,8 @@ def parser_for() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser_for().parse_args(argv)
-    if getattr(args, "good_mse_threshold", 0.0) < 0:
-        print(json.dumps({"ok": False, "errors": [{"message": "good MSE threshold must be >= 0"}]}))
+    if getattr(args, "good_mse_threshold", 0.0) < 0 or getattr(args, "revision", 1) < 1:
+        print(json.dumps({"ok": False, "errors": [{"message": "threshold must be >= 0 and revision >= 1"}]}))
         return 2
     result = run(args)
     print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
