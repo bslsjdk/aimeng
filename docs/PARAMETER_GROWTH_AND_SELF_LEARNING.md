@@ -63,3 +63,10 @@ Parameters are not a reliable editable database. Knowledge that changes frequent
 ## Current state
 
 This document is a design contract, not evidence that the loop is implemented or that any student has been trained. The initial SFT entry point and teacher candidate batches are scaffolding. Next implementation steps are assistant-only loss masking, dataset fingerprinting and leakage checks, held-out capability evaluation, telemetry, and a small reproducible end-to-end training run before scaling.
+
+
+## Human-like idea generation and bounded plasticity
+
+The broader implementation contract is now specified in [Human-like Thinking and Plasticity](HUMAN_LIKE_THINKING_AND_PLASTICITY.md). It defines the unified-core-model design, speculative idea lifecycle, evidence levels, independent verification, task-state machine, temporary plasticity trials, reusable module manifest, rollback rules, tests, and staged experiments.
+
+Important implementation boundary: the current self-learning loop and any future idea-cycle code do not prove dynamic neuron growth. Implement the software-level idea/verification/experience loop first; test adapters as isolated candidate artifacts next; only then investigate real dynamic subgraph or neuron/connection growth when the actual backend supports it. Never overwrite stable core weights directly from an unverified task result.
