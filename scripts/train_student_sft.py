@@ -165,6 +165,8 @@ def build_run_manifest(data_path: Path, model: str, args, train, val, test_count
             "epochs": args.epochs, "learning_rate": args.lr, "batch_size": args.batch_size,
             "gradient_accumulation_steps": args.grad_accum, "max_length": args.max_length,
             "seed": args.seed, "gradient_checkpointing": args.gradient_checkpointing,
+            "lora": args.lora, "lora_r": args.lora_r, "lora_alpha": args.lora_alpha,
+            "lora_dropout": args.lora_dropout,
         },
         "runtime": {"python": platform.python_version()},
         "claim_scope": "SFT run metadata; does not establish task competence or deployment RAM compliance",
@@ -183,6 +185,10 @@ def main() -> int:
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--gradient-checkpointing", action="store_true")
+    parser.add_argument("--lora", action="store_true", help="Train parameter-efficient LoRA adapters instead of all model weights")
+    parser.add_argument("--lora-r", type=int, default=8)
+    parser.add_argument("--lora-alpha", type=int, default=16)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--dry-run", action="store_true", help="Audit eligibility/splits/config without loading model weights")
     args = parser.parse_args()
 
@@ -197,6 +203,8 @@ def main() -> int:
         raise SystemExit("Refusing to train: zero verified, training-eligible validation records")
     if args.epochs <= 0 or args.lr <= 0 or args.batch_size < 1 or args.grad_accum < 1 or args.max_length < 16:
         raise SystemExit("Invalid training hyperparameters")
+    if args.lora_r < 1 or args.lora_alpha < 1 or not 0 <= args.lora_dropout < 1:
+        raise SystemExit("Invalid LoRA configuration")
     manifest = build_run_manifest(data_path, args.model, args, train, val, len(test))
     print(json.dumps({
         "ok": True, "train_records": len(train), "validation_records": len(val),
@@ -218,6 +226,16 @@ def main() -> int:
             raise SystemExit("Tokenizer has neither pad_token nor eos_token; refusing unsafe padding")
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(args.model, trust_remote_code=False)
+    if args.lora:
+        try:
+            from peft import LoraConfig, get_peft_model
+        except ImportError as exc:
+            raise SystemExit("LoRA requested but PEFT is missing; install requirements-sft.txt") from exc
+        model = get_peft_model(model, LoraConfig(
+            r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout,
+            target_modules="all-linear", task_type="CAUSAL_LM"
+        ))
+        model.print_trainable_parameters()
     if args.gradient_checkpointing:
         if not hasattr(model, "gradient_checkpointing_enable"):
             raise SystemExit("Selected model does not support gradient checkpointing")
