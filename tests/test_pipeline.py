@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -32,6 +34,30 @@ class CollectorTests(unittest.TestCase):
 
     def test_unknown_verifier_stays_unknown(self):
         self.assertEqual(collector.verify_output({"verifier": "llm_judge"}, "probably correct")[:2], ("unknown", None))
+
+
+    def test_collector_handles_large_stderr_without_pipe_deadlock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake_cli = Path(directory) / "fake-llama-cli"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\\n"
+                "import sys\\n"
+                "print('Mercury')\\n"
+                "sys.stderr.write('diagnostic-line\\n' * 100000)\\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(fake_cli.stat().st_mode | 0o111)
+            record = collector.run_one(
+                str(fake_cli), "unused.gguf",
+                {"task_id": "deadlock-test", "prompt": "answer",
+                 "verifier": "exact_match", "expected": "Mercury",
+                 "dataset_split": "train"},
+                {"budget_id": "small-v1", "n_ctx": 32, "max_tokens": 8,
+                 "threads": 1, "gpu_layers": 0},
+                timeout_s=5, device_class="test", accelerator="CPU",
+            )
+        self.assertEqual(record["result"]["status"], "completed")
+        self.assertEqual(record["result"]["quality_label"], "pass")
 
 
 class TrainingTargetTests(unittest.TestCase):
