@@ -116,3 +116,13 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 - [自有模型工件格式 v0 草案](docs/ARTIFACT_FORMAT_V0.md)
 
 这些是设计基线，不代表机制已经实现。现有 GGUF/Ornith 工作流只作为教师或比较基线。先把学习闭环、格式原型和资源测量做成可验证实现，再扩大模型和接入 Android；不提前锁定任何现成模型格式。
+
+
+## 并发训练实验（新原型）
+
+- [并发训练设计与验收方法](docs/PARALLEL_TRAINING.md)：明确独立专家并行、同一模型分布式训练和错误的多优化器并发之间的区别。
+- scripts/parallel_training.py：按声明的 RAM/VRAM 预算与最大 worker 数调度独立训练进程，分别保存日志/输出并生成运行报告。
+- examples/parallel-training-plan.example.json：两任务计划示例；其中训练命令是占位符，必须替换为真实训练入口后才能运行。
+- tests/test_parallel_training.py：覆盖计划校验、超预算拒绝、输出目录隔离、dry-run 和两个独立命令的执行。
+
+先只运行 --dry-run 验证配置，再用两个小任务比较串行与并发的真实耗时、峰值内存和验证质量。这里的内存数值是调度预算，不是操作系统强制限制；该原型没有实现梯度同步，也没有声称已经加速模型训练。
