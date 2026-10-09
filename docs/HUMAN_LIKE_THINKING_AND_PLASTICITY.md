@@ -544,3 +544,18 @@ python scripts/verify_artifact_integrity.py \
 Exit codes: 0 means the digest matched, 1 means a valid check found a mismatch, and 2 means the check could not be performed because the input/IO was invalid. The expected digest must be recorded independently before the check; deriving it from the same current bytes would make the test meaningless.
 
 This adapter verifies **byte integrity only**, not factual correctness, code behavior, safety, or whether an artifact is a good answer. It is deliberately small so the feedback and trace pipeline can be exercised without running untrusted code. The next verifier adapters should be narrow and task-specific, such as parsing a known test report or checking a deterministic mathematical invariant. Never run arbitrary submitted code on the host just to obtain a learning signal; use an isolated sandbox with resource limits before adding such an adapter.
+
+
+## 20. Dynamic parameter activation and residency
+
+The research objective is not simply to reject MoE. AIMENG is investigating whether one unified core model can coordinate a variable compute graph with a bounded, dynamically loaded parameter working set, then grow its validated capabilities through versioned adapters or computational subgraphs. See [Dynamic Parameter Activation and Loading Architecture](DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md).
+
+Keep these mechanisms distinct in both implementation and experiments:
+- compute activation: which operations execute;
+- parameter residency: which weights are currently resident;
+- capability expansion: which validated optional structures become available;
+- learning/promotion: which candidate changes survive held-out and regression gates.
+
+A routing decision does not prove memory was freed; unloading weights does not prove FLOPs were reduced; adding parameters does not prove quality improved. Experiments must isolate these effects and report quality, peak memory, cold/warm latency, transfer cost, and regressions.
+
+The Android hard peak RAM ceiling remains below 4096 MiB, with a target release gate below 3800 MiB. Fine-grained neuron/connection loading is a later research stage, not an assumed capability: begin with backend-supported blocks, layers, or adapters and move to finer units only when measurements justify it.
