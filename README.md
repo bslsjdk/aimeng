@@ -183,3 +183,10 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 
 首个可执行的独立验证器适配器也已加入：`scripts/verify_artifact_integrity.py` 对指定文件计算 SHA-256，并输出 evidence JSON 与 `aimeng.learning_signal.v1` 信号；`tests/test_artifact_integrity_verifier.py` 覆盖匹配、不匹配、非法摘要和文件缺失。它只证明字节完整性，不证明内容正确。运行说明和退出码见 [人类式思考与可塑性规格第 19 节](docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md#19-first-executable-verifier-adapter-file-integrity)。该适配器不会执行待测代码，也不会更新权重或晋级记忆。
+
+
+## 动态参数激活与按需加载（核心研究方向）
+
+新增 [动态参数激活与加载架构规格](docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md)。研究目标不是简单拒绝 MoE，而是让**一个统一核心模型**联合管理可变计算图、动态参数驻留工作集和经过验证的能力扩展。必须分别实验“哪些运算执行”“哪些参数驻留内存”“新增结构是否提升能力”，不能把路由、卸载或增加参数直接当成性能/智能提升。
+
+实现路线按风险递增：状态机与资源预算模拟 → 后端支持的块/层按需加载与实测 → 真正的动态计算激活 → 候选 adapter/子图验证与回滚 → 有证据后再研究更细粒度神经元/连接动态化。Android 整应用峰值 RAM 必须低于 4096 MiB，目标晋级门低于 3800 MiB。当前这份文件是研究规格，不代表参数分页或动态神经元已经实现。
