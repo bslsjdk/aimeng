@@ -13,7 +13,6 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -103,7 +102,6 @@ def main() -> int:
     parser.add_argument("--gpu-layers", type=int, default=99, help="Number of layers to offload; 99 means all possible")
     parser.add_argument("--startup-timeout", type=int, default=900, help="Seconds allowed for model download/load")
     parser.add_argument("--max-new-tokens", type=int, default=768)
-    parser.add_argument("--max-input-tokens", type=int, default=3072)
     parser.add_argument("--limit", type=int, default=0, help="Optional smoke-test limit; 0 means all tasks")
     args = parser.parse_args()
 
@@ -115,7 +113,7 @@ def main() -> int:
         parser.error("output must not overwrite the tasks file")
     if output_path.exists():
         parser.error(f"output already exists; refusing to overwrite: {output_path}")
-    if (args.max_new_tokens < 1 or args.max_input_tokens < 16 or args.context_size < 256
+    if (args.max_new_tokens < 1 or args.context_size < 256
             or args.gpu_layers < 0 or args.startup_timeout < 1 or args.limit < 0
             or not (1 <= args.port <= 65535)):
         parser.error("invalid token, context, port, GPU-layer, timeout, or limit setting")
