@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIMENG Composable Neural Network Graph",
+  "description": "Declarative graph contract for toy-network and later model experiments. Validation does not execute or train the graph.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "graph_id",
+    "graph_revision",
+    "base_model_revision",
+    "input_ports",
+    "output_ports",
+    "units",
+    "edges",
+    "execution_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "aimeng.neural_network_graph.v1"
+    },
+    "graph_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "graph_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "base_model_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_ports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/port"
+      }
+    },
+    "output_ports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/port"
+      }
+    },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "unit_id",
+          "unit_revision",
+          "kind",
+          "artifact_ref",
+          "enabled_by_default",
+          "resource_budget"
+        ],
+        "properties": {
+          "unit_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unit_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "kind": {
+            "enum": [
+              "encoder",
+              "feature",
+              "gated_mlp",
+              "attention_like",
+              "recurrent",
+              "adapter",
+              "subgraph",
+              "decoder",
+              "selector"
+            ]
+          },
+          "artifact_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enabled_by_default": {
+            "type": "boolean"
+          },
+          "resource_budget": {
+            "type": "object",
+            "required": [
+              "parameter_bytes",
+              "activation_peak_bytes",
+              "scratch_bytes"
+            ],
+            "properties": {
+              "parameter_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "activation_peak_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "scratch_bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "edge_id",
+          "from_unit",
+          "from_port",
+          "to_unit",
+          "to_port"
+        ],
+        "properties": {
+          "edge_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "from_unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "from_port": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to_unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to_port": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "execution_policy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "max_rounds",
+        "max_active_units",
+        "memory_budget_bytes"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "synchronous_rounds",
+            "event_driven_experimental"
+          ]
+        },
+        "max_rounds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_active_units": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "memory_budget_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "replacement_boundary": {
+          "enum": [
+            "between_requests",
+            "between_rounds",
+            "restart_only"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "port": {
+      "type": "object",
+      "required": [
+        "name",
+        "dtype",
+        "shape"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
