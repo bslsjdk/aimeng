@@ -8,6 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("parallel_training", ROOT / "scripts/parallel_training.py")
 parallel = importlib.util.module_from_spec(SPEC)
+# dataclasses resolves the class's module through sys.modules during decoration.
+# Register before exec_module so the test works in a clean Python process.
+sys.modules[SPEC.name] = parallel
 SPEC.loader.exec_module(parallel)
 
 class PlanTests(unittest.TestCase):
@@ -31,7 +34,7 @@ class PlanTests(unittest.TestCase):
 
     def test_rejects_shared_output_directory(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); output = str(root/"same"); plan = root/"plan.json"
+            root = Path(directory); output = str(root/"same"); plan = root / "plan.json"
             plan.write_text(json.dumps({"memory_budget_mb":1000,"jobs":[
                 {"id":"a","argv":["python","-c","pass"],"memory_mb":100,"output_dir":output},
                 {"id":"b","argv":["python","-c","pass"],"memory_mb":100,"output_dir":output}]}), encoding="utf-8")
@@ -54,7 +57,6 @@ class PlanTests(unittest.TestCase):
             self.assertEqual({item["status"] for item in report["results"]},{"passed"})
             self.assertIn("a",(root/"a"/"training.log").read_text(encoding="utf-8"))
             self.assertIn("b",(root/"b"/"training.log").read_text(encoding="utf-8"))
-
 
     def test_parallel_toy_training_saves_independent_checkpoints(self):
         with tempfile.TemporaryDirectory() as directory:
