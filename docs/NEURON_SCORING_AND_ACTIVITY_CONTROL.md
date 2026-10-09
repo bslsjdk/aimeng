@@ -13,14 +13,15 @@ python scripts/neuron_scoring_lab.py --epochs 80 --trace /tmp/neuron-score-trace
 
 ## Per-unit score
 
-For each unit, the lab measures held-out mean squared error (MSE) for the current ensemble, then temporarily disables one unit and measures MSE again:
+For an active unit, the lab temporarily removes it and measures the held-out mean squared error (MSE) change. For a sleeping unit, it temporarily admits the candidate and measures whether the ensemble improves:
 
 ```text
-marginal_contribution = MSE(without_unit) - MSE(with_unit)
-score = marginal_contribution - compute_cost
+active unit:   contribution = MSE(without_unit) - MSE(current_ensemble)
+sleeping unit: contribution = MSE(current_ensemble) - MSE(with_candidate)
+score = contribution - compute_cost
 ```
 
-A positive contribution means removing the unit made the current ensemble worse on this validation set. It does **not** prove universal usefulness or causal value outside this measured setup. The cost term makes the policy consider whether the measured benefit justifies compute.
+A positive contribution means the measured counterfactual change favors that unit in the current validation setup. It does **not** prove universal usefulness or causal value outside this measured setup. The cost term makes the policy consider whether the measured benefit justifies compute. A safety floor keeps at least one unit active, so redundant negative scores cannot shut the entire system down in one cycle.
 
 The controller uses separate enter and exit thresholds (hysteresis) to reduce rapid state flipping. Score, activation state, parameter-update events, unit identity, and revision are logged separately.
 
