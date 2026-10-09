@@ -82,6 +82,12 @@ python scripts/online_adaptation.py --input runs/observation.json
 
 **重要：** `whole_app_pss_mib` 必须来自目标 Android 上对整个应用进程/进程组的真实测量，并将 `memory_measurement_source` 设为 `android_whole_app`。仅有数值而无可信来源标记时，决策器会拒绝升档。采集器记录的 llama-cli 子进程 PSS 不能冒充整个 Android 应用的 PSS。该脚本当前是策略原型，尚未接入实际推理执行器；单元测试通过也不代表已验证真实加速或手机内存安全。
 
+## 自适应思考策略与 batch 实验
+
+可选的 `--strategy-memory runs/verified-experiences.jsonl` 会让同一个 9B 模型根据历史已验证结果选择 `direct`、`decompose` 或 `verify` 提示策略。策略记忆不修改 GGUF 权重；没有足够经验时退回 `direct`。只有使用已知独立验证器的 full-budget 结果才会写入跨任务经验。
+
+采集器也会向 llama.cpp 请求真实的 `-b` batch 值：small=64、medium=128、full=256。batch 主要影响提示词处理吞吐和临时缓冲区，较大的值不保证更快，也可能提高内存峰值。这些只是实验档位；运行前应通过所用版本的 `llama-cli --help` 确认参数支持，并在目标设备配对测量。遥测记录的是请求值，不会谎称后端实际生效值已被确认。
+
 ## GPU offload 与预测
 
 - 默认 `--gpu-layers 0`，不声称使用 GPU。只有确认 `llama-cli` 是 CUDA 构建且日志显示层已 offload 后，才传 `--gpu-layers 99 --accelerator CUDA-T4`；这两个参数只表达请求/环境标签，实际 offload 仍要看后端日志。
