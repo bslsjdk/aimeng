@@ -107,7 +107,7 @@ class IdeaCycleState:
             raise StateError(f"task state JSON is corrupt: {target}") from exc
         if not isinstance(doc, dict) or doc.get("schema_version") != "aimeng.task_state.v1":
             raise StateError("unsupported or invalid task state schema")
-        if doc.get("state") not in STATES:
+        if not isinstance(doc.get("state"), str) or doc.get("state") not in STATES:
             raise StateError("unknown task state")
         if not isinstance(doc.get("events"), list) or not isinstance(doc.get("counters"), dict):
             raise StateError("task state is missing events or counters")
@@ -122,7 +122,7 @@ class IdeaCycleState:
         _atomic_json(self.path, self.document)
 
     def transition(self, target: str, reason: str, metadata: dict[str, Any] | None = None) -> None:
-        if target not in STATES:
+        if not isinstance(target, str) or target not in STATES:
             raise StateError(f"unknown target state: {target}")
         if self.state in TERMINAL:
             raise StateError(f"terminal state {self.state} cannot transition")
@@ -183,7 +183,7 @@ class IdeaCycleState:
         if self.state != "FAILED_RECOVERABLE":
             raise StateError("resume() requires FAILED_RECOVERABLE state")
         target = self.document.get("resume_state")
-        if target not in STATES or target in TERMINAL or target == "FAILED_RECOVERABLE":
+        if not isinstance(target, str) or target not in STATES or target in TERMINAL or target == "FAILED_RECOVERABLE":
             raise StateError("invalid resume_state")
         self.document["state"] = target
         self.document["resume_state"] = None
