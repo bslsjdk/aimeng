@@ -150,4 +150,4 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 ## 免费 GPU：Ornith 教师生成 → 学生训练
 
-新增 [免费 GPU 蒸馏操作手册](docs/FREE_GPU_ORNITH_TO_STUDENT.md)、CUDA 教师生成器 `scripts/generate_ornith_teacher_demos.py` 和任务模板 `data/teacher_seed/gpu_tasks.example.jsonl`。它使用官方 Transformers checkpoint `ornith-ai/Ornith-1.5-9B` 并以 bitsandbytes NF4 4-bit 方式加载教师，生成的数据全部保持待核验、未拆分、不可训练。先用 `--limit 2` 做 smoke test，再生成批次；独立核验和数据拆分完成后，才进入既有一键学生训练流水线。注意教师推理和当前学生训练依赖版本约束不同，手册记录了分阶段环境要求。当前新增的是生成器与流程代码，不代表已在 Kaggle GPU 上实际运行成功。
+新增 [免费 GPU 蒸馏操作手册](docs/FREE_GPU_ORNITH_TO_STUDENT.md)、教师生成器 `scripts/generate_ornith_teacher_demos.py` 和任务模板 `data/teacher_seed/gpu_tasks.example.jsonl`。教师路径已调整为官方量化仓库 `ornith-ai/Ornith-1.5-9B-GGUF:Q4_K_M`，由 CUDA 版 `llama-server` 加载，不再加载原始 Transformers BF16 checkpoint 后临时量化。生成的数据全部保持待核验、未拆分、不可训练。先用 `--limit 2` 做 smoke test，并检查启动日志确认 GPU offload，再生成批次；独立核验和数据拆分完成后，才进入既有一键学生训练流水线。当前已提交生成器与流程代码，但尚未在真实 Kaggle GPU 上实测成功。
