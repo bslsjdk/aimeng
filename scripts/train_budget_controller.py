@@ -51,6 +51,7 @@ def group_records(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
     errors: list[str] = []
     by_task: dict[str, list[dict[str, Any]]] = defaultdict(list)
     split_by_task: dict[str, set[str]] = defaultdict(set)
+    task_by_pair: dict[str, set[str]] = defaultdict(set)
     for row in rows:
         task_id = row.get("task_id")
         split = row.get("task", {}).get("dataset_split")
@@ -58,10 +59,18 @@ def group_records(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
             errors.append("record missing task_id or valid dataset_split")
             continue
         split_by_task[str(task_id)].add(str(split))
+        pair_id = row.get("pair_group_id")
+        if not pair_id:
+            errors.append(f"task {task_id} is missing pair_group_id")
+        else:
+            task_by_pair[str(pair_id)].add(str(task_id))
         by_task[str(task_id)].append(row)
     for task_id, splits in split_by_task.items():
         if len(splits) != 1:
             errors.append(f"task {task_id} leaks across splits: {sorted(splits)}")
+    for pair_id, task_ids in task_by_pair.items():
+        if len(task_ids) != 1:
+            errors.append(f"pair_group_id {pair_id} is shared by multiple tasks: {sorted(task_ids)}")
 
     examples = []
     for task_id, records in by_task.items():
@@ -71,9 +80,10 @@ def group_records(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
         split = records[0].get("task", {}).get("dataset_split")
         task = records[0].get("task", {})
         env = records[0].get("environment", {})
-        labels_seen = {budget_label(r) for r in records if budget_label(r)}
-        if labels_seen != set(LABELS):
-            errors.append(f"task {task_id} has budget labels {sorted(str(x) for x in labels_seen)}; expected small/medium/full")
+        labels = [budget_label(r) for r in records]
+        labels_seen = {label for label in labels if label}
+        if labels_seen != set(LABELS) or any(label is None for label in labels) or len(labels) != 3 or len(set(labels)) != 3:
+            errors.append(f"task {task_id} must have exactly one small, one medium, and one full run; got {labels}")
             continue
         valid = []
         for record in records:
@@ -208,6 +218,7 @@ def main() -> int:
     torch.save({"state_dict": model.state_dict(), "input_dim": x_train.shape[1],
                 "labels": LABELS}, model_path)
     digest = hashlib.sha256(input_path.read_bytes()).hexdigest()
+    excluded_pairs = max(0, len({str(row.get("task_id")) for row in rows}) - len(examples))
     manifest = {
         "schema_version": "aimeng.controller.v1",
         "model_type": "small_mlp_budget_classifier",
@@ -224,7 +235,7 @@ def main() -> int:
         "validation_majority_class_baseline": baseline,
         "train_task_pairs": len(train),
         "validation_task_pairs": len(val),
-        "excluded_unknown_or_failed_only_pairs": len(examples) == 0,
+        "excluded_unknown_or_failed_only_pairs": excluded_pairs,
         "telemetry_sha256": digest,
         "checkpoint_file": model_path.name,
         "warning": "Experimental classifier only. Do not deploy unless held-out quality, latency, memory, and fallback gates pass.",
