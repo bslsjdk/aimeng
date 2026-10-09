@@ -141,3 +141,35 @@ The numeric quality margin, latency budget, and target task suite must be fixed 
 ## 11. Current implementation boundary
 
 This is a research architecture specification. Existing AIMENG correction-trace and verifier code provides parts of the evidence/promotion infrastructure, but it does not implement a runtime parameter pager, dynamic compute graph, adaptive parameter-count controller, or actual model growth. These must be implemented and measured separately.
+
+
+## 12. First executable artifact: trace-only workspace simulator
+
+The first small implementation is `scripts/simulate_parameter_workspace.py`, with tests in `tests/test_parameter_workspace_simulation.py`. It models units, dependency-closed loads, a byte budget, LRU eviction, in-use pins, deferred unload, and rollback after a simulated load failure. The tests are included in the idea-cycle CI workflow.
+
+Example plan:
+
+```json
+{
+  "budget_bytes": 100,
+  "units": [
+    {"unit_id": "base", "size_bytes": 40, "dependencies": []},
+    {"unit_id": "math", "size_bytes": 30, "dependencies": ["base"]},
+    {"unit_id": "vision", "size_bytes": 50, "dependencies": []}
+  ],
+  "actions": [
+    {"op": "load", "unit_id": "math"},
+    {"op": "begin_use", "unit_id": "math"},
+    {"op": "end_use", "unit_id": "math"},
+    {"op": "load", "unit_id": "vision"}
+  ]
+}
+```
+
+Run it with:
+
+```bash
+python scripts/simulate_parameter_workspace.py --input plan.json --output runs/workspace-simulation.json
+```
+
+This is intentionally a **trace-only simulation**. It validates scheduler logic and produces simulated resident-byte accounting, but it does not touch model weights, release OS memory, measure Android RAM, or skip actual model computation. Its success is only a prerequisite for a real backend integration, not evidence of runtime speedup or memory reduction.
