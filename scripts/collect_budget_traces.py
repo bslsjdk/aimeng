@@ -80,6 +80,8 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
         "-c", str(budget["n_ctx"]), "-n", str(budget["max_tokens"]),
         "-t", str(budget["threads"]), "--no-display-prompt", "--no-warmup",
     ]
+    if budget.get("gpu_layers", 0) > 0:
+        cmd.extend(["-ngl", str(budget["gpu_layers"])])
     start = time.monotonic()
     rss_peak: float | None = None
     pss_peak: float | None = None
@@ -253,6 +255,8 @@ def main() -> int:
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.gpu_layers < 0:
+        parser.error("--gpu-layers must be >= 0")
     if args.gpu_layers < 0:
         parser.error("--gpu-layers must be >= 0")
     budget_set = [dict(b, threads=args.threads, gpu_layers=args.gpu_layers) for b in BUDGETS]
