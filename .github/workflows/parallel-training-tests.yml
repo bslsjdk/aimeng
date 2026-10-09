@@ -1,0 +1,20 @@
+name: Parallel training scheduler tests
+
+on:
+  push:
+    branches:
+      - feat/neuro-inspired-bounded-runtime
+  pull_request:
+    branches:
+      - feat/neuro-inspired-bounded-runtime
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run parallel scheduler tests
+        run: python tests/test_parallel_training.py

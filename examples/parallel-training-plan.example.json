@@ -1,0 +1,40 @@
+{
+  "memory_budget_mb": 512,
+  "max_workers": 2,
+  "jobs": [
+    {
+      "id": "expert_reasoning",
+      "argv": [
+        "python",
+        "scripts/toy_train.py",
+        "--task",
+        "reasoning",
+        "--steps",
+        "100",
+        "--seed",
+        "17",
+        "--output",
+        "runs/models/expert_reasoning"
+      ],
+      "memory_mb": 128,
+      "output_dir": "runs/parallel/expert_reasoning"
+    },
+    {
+      "id": "expert_tool_use",
+      "argv": [
+        "python",
+        "scripts/toy_train.py",
+        "--task",
+        "tool_use",
+        "--steps",
+        "100",
+        "--seed",
+        "29",
+        "--output",
+        "runs/models/expert_tool_use"
+      ],
+      "memory_mb": 128,
+      "output_dir": "runs/parallel/expert_tool_use"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bslsjdk/aimeng/schemas/task_trajectory.schema.json",
+  "title": "AIMENG Task Trajectory",
+  "type": "object",
+  "required": ["schema_version", "task_id", "sample_id", "task_family", "input", "outcome", "provenance", "split"],
+  "properties": {
+    "schema_version": { "const": "aimeng.trajectory.v1" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "sample_id": { "type": "string", "minLength": 1 },
+    "task_family": { "type": "string", "minLength": 1 },
+    "input": { "type": "object", "required": ["prompt"], "properties": { "prompt": { "type": "string", "minLength": 1 }, "context": {}, "constraints": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": true },
+    "target": { "type": ["object", "null"], "properties": { "answer": {}, "trajectory": { "type": "array", "items": { "type": "object" } }, "tool_calls": { "type": "array", "items": { "type": "object" } } }, "additionalProperties": true },
+    "outcome": { "type": "object", "required": ["status"], "properties": { "status": { "enum": ["pass", "fail", "unknown", "not_run"] }, "verifier": { "type": ["string", "null"] }, "verifier_version": { "type": ["string", "null"] }, "evidence": { "type": "array", "items": { "type": "string" } }, "latency_ms": { "type": ["number", "null"], "minimum": 0 }, "peak_memory_mib": { "type": ["number", "null"], "minimum": 0 } }, "additionalProperties": true },
+    "provenance": { "type": "object", "required": ["source_type"], "properties": { "source_type": { "enum": ["human_authored", "teacher_generated", "real_task", "public_dataset", "synthetic", "unknown"] }, "source_ref": { "type": ["string", "null"] }, "teacher_model": { "type": ["string", "null"] }, "teacher_artifact_sha256": { "type": ["string", "null"], "pattern": "^[a-fA-F0-9]{64}$" }, "prompt_version": { "type": ["string", "null"] }, "license": { "type": ["string", "null"] }, "privacy_review": { "enum": ["passed", "not_required", "pending", "rejected"] } }, "additionalProperties": true },
+    "split": { "enum": ["unassigned", "train", "validation", "test"] },
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "tags": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
