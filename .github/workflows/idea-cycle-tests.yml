@@ -10,6 +10,7 @@ on:
       - "scripts/build_correction_feedback.py"
       - "scripts/validate_correction_trace.py"
       - "scripts/verify_artifact_integrity.py"
+      - "scripts/simulate_parameter_workspace.py"
       - "schemas/idea_record.schema.json"
       - "schemas/plastic_module.schema.json"
       - "schemas/task_state.schema.json"
@@ -21,6 +22,7 @@ on:
       - "tests/test_correction_feedback.py"
       - "tests/test_correction_trace.py"
       - "tests/test_artifact_integrity_verifier.py"
+      - "tests/test_parameter_workspace_simulation.py"
       - ".github/workflows/idea-cycle-tests.yml"
   pull_request:
     paths:
@@ -71,3 +73,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_correction_trace.py'
       - name: Run file-integrity verifier tests
         run: python -m unittest discover -s tests -p 'test_artifact_integrity_verifier.py'
+      - name: Run dynamic parameter workspace simulation tests
+        run: python -m unittest discover -s tests -p 'test_parameter_workspace_simulation.py'
