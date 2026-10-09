@@ -1,0 +1,17 @@
+name: AIMENG SFT data gates
+on:
+  pull_request:
+  push:
+    branches: [main, master, feat/neuro-inspired-bounded-runtime, feat/teacher-knowledge-seed-batch]
+jobs:
+  sft-data-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate candidate batch structure
+        run: python scripts/validate_sft_candidates.py --input data/teacher_seed/sft_candidates_batch02.jsonl
+      - name: Test student training eligibility gates
+        run: python -m unittest discover -s tests -p 'test_train_student_sft.py' -v
