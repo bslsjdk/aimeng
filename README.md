@@ -199,3 +199,13 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 The same computational-unit contract covers model-learned candidates, human-authored modules, imported compatible units, and structures integrated into a versioned core-model graph. See [External and Internal Neural Units](docs/EXTERNAL_AND_INTERNAL_NEURAL_UNITS.md) for lifecycle states, manifests, loading/integration rules, validation gates, rollback, and the current implementation boundary.
 
 - [Recursive Neural-Unit Training and Growth](docs/RECURSIVE_NEURAL_UNIT_TRAINING_AND_GROWTH.md): seed-unit training, candidate generation, isolated training, validation gates, recursive growth, pruning, and mobile resource limits.
+
+
+## Core neuron replacement and activity evidence
+
+- [Core neuron replacement and activity tracing](docs/CORE_NEURON_REPLACEMENT_AND_ACTIVITY_TRACING.md): stable unit identities, safe single-unit replacement, rollback, and evidence-backed activity records.
+- [Core neuron unit contract](schemas/core_neuron_unit.schema.json): unit location, tensor interfaces, immutable parameter artifact, health, and replacement policy.
+- [Neuron activity trace contract](schemas/neuron_activity_trace.schema.json): append-only participation, resource measurements, and outcome attribution.
+- Validator: `scripts/validate_neuron_activity_trace.py`; tests: `tests/test_neuron_activity_trace.py`.
+
+These are contracts and validation scaffolding, not a working neural-unit runtime. Real tensor-level replacement and causal attribution still require a compatible model architecture, registry, execution backend, and controlled experiments.
