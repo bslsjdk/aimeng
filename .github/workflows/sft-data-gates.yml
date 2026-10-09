@@ -27,3 +27,4 @@ jobs:
           python scripts/train_student_sft.py --help
           python scripts/evaluate_student_sft.py --help
           python scripts/gate_student_release.py --help
+          python scripts/run_student_pipeline.py --help
