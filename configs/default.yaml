@@ -1,0 +1,47 @@
+project:
+  name: aimeng-gguf-router
+  schema_version: 1
+
+model:
+  # Set AIMENG_MODEL_GGUF in the environment; never commit model weights.
+  path_env: AIMENG_MODEL_GGUF
+  expected_family: unknown_until_inspected
+  expected_parameters_billions: 9
+  expected_quantization: Q4
+  sha256_required_for_reproducible_runs: true
+
+runtime_constraints:
+  # Whole Android application hard ceiling, not a target to fill.
+  whole_app_runtime_hard_limit_mib: 4096
+  safety_headroom_mib: 384
+  max_concurrent_generation_tasks: 1
+  adaptive_context: true
+  allow_router_to_disable_safety_limit: false
+
+routing:
+  first_experiment: structured_ffn_channel_groups
+  group_size: 128
+  candidate_pool_schedule: [0.125, 0.25, 0.5, 0.75, 1.0]
+  expansion_on_uncertainty: true
+  fallback_to_full_path_if_quality_gate_fails: true
+  never_assume_skipped_channels_reduce_memory_without_backend_measurement: true
+
+reward:
+  # Quality is a gate, not something that can be traded away for speed.
+  quality_gate_required: true
+  optimize:
+    - task_quality
+    - measured_latency
+    - measured_peak_memory
+    - measured_compute
+  unverified_self_confidence_is_not_ground_truth: true
+
+evaluation:
+  require_full_model_baseline: true
+  require_held_out_tasks: true
+  record_peak_rss: true
+  record_peak_pss_when_available: true
+  record_first_token_latency: true
+  record_tokens_per_second: true
+  record_task_success_rate: true
+  record_backend_and_driver_versions: true
