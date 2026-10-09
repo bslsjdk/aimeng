@@ -160,8 +160,9 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 首批可执行契约代码已加入同一分支：
 - `schemas/idea_record.schema.json` 与 `scripts/validate_idea_records.py`：想法状态与独立证据门槛。
-- `schemas/plastic_module.schema.json`：可塑模块的版本、兼容和晋级契约。
+- `schemas/plastic_module.schema.json` + `scripts/validate_plastic_module.py`：可塑模块的版本、兼容和晋级契约及可执行验收门。
+- `schemas/task_state.schema.json`：任务检查点格式。
 - `scripts/idea_cycle_state.py`：可恢复的想法任务状态机与原子检查点。
-- `tests/test_idea_records.py`、`tests/test_idea_cycle_state.py` 和 `.github/workflows/idea-cycle-tests.yml`：自动化契约测试。
+- `tests/test_idea_records.py`、`tests/test_idea_cycle_state.py`、`tests/test_plastic_module_manifest.py` 和 `.github/workflows/idea-cycle-tests.yml`：自动化契约测试。
 
 这些代码目前建立的是数据/状态基础层，尚未接入真实模型生成、独立验证器或权重训练；以 GitHub Actions 的实际结果为准，不把提交代码等同于测试通过。
