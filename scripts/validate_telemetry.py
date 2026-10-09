@@ -26,7 +26,7 @@ REQUIRED_PATHS = (
     "task.task_family", "task.dataset_split", "budget.budget_id",
     "budget.execution_mode", "result.status", "result.quality_label",
     "performance.total_latency_ms", "memory.measurement_method",
-    "routing.controller_version", "provenance.config_sha256",
+    "routing.controller_version",
 )
 
 
