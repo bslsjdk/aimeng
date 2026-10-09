@@ -34,7 +34,8 @@ class GateTests(unittest.TestCase):
         self.assertEqual(candidate["verification"]["status"],"pending")
         self.assertFalse(candidate["training_eligible"])
         self.assertEqual(candidate["split"],"unassigned")
-\n    def test_teacher_import_never_auto_approves(self):
+
+    def test_teacher_import_never_auto_approves(self):
         candidate=convert({"schema_version":"aimeng.teacher_demo.v1","task_id":"t1","topic":"python","prompt":"Explain","response":"Answer","teacher":{"model":"Ornith-1.5-9B","prompt_version":"v1"}},1)
         self.assertEqual(candidate["verification"]["status"],"pending")
         self.assertFalse(candidate["training_eligible"])
