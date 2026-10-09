@@ -40,9 +40,10 @@ python scripts/collect_budget_traces.py \
 ```bash
 python scripts/validate_telemetry.py data/telemetry.jsonl --require-paired-budgets --check-task-split-leakage
 python scripts/train_budget_controller.py --input data/telemetry.jsonl --output-dir outputs/budget_controller
+python scripts/evaluate_budget_controller.py --input data/telemetry.jsonl --model-dir outputs/budget_controller --output outputs/budget_controller/test_report.json
 ```
 
-控制器只使用 completed 且独立 verifier 给出 pass/fail 的配对任务；目标是“最低一档通过质量验证的预算”。如果所有预算都失败/unknown，该任务不提供安全目标。训练按任务预先记录的 train/validation split 分开，至少需要 12 个有效 train task-pairs、3 个 validation pairs，并且训练标签至少包含两档预算。达不到门槛就停止，不合成假数据。
+控制器只使用 completed 且独立 verifier 给出 pass/fail 的配对任务；目标是“最低一档通过质量验证的预算”。如果所有预算都失败/unknown，该任务不提供安全目标。训练按任务预先记录的 train/validation/test split 分开，至少需要 12 个有效 train task-pairs、3 个 validation pairs 和 3 个有效 test pairs，并且训练标签至少包含两档预算。达不到门槛就停止，不合成假数据。
 
 第一版 MLP 是研究基线，不是生产策略。训练完成后运行 `scripts/evaluate_budget_controller.py`，在独立 test split 上对比控制器预测、固定 full-budget 的质量通过率、平均延迟与可用 PSS。测试对必须足够且可客观评分；上线前仍需在目标设备上复验失败/回退率与资源硬限制。采集器的 PSS 采样、命令行选项和后端能力需要在目标环境验证；schema 通过不代表数据真实或模型加速。
 
