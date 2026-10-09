@@ -107,8 +107,23 @@ def main() -> int:
         from transformers import AutoTokenizer, AutoModelForCausalLM
     except ImportError as exc:
         raise SystemExit("Install compatible torch and transformers before model evaluation") from exc
-    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=False)
-    model = AutoModelForCausalLM.from_pretrained(args.model, trust_remote_code=False)
+    model_path = Path(args.model)
+    adapter_config = model_path / "adapter_config.json" if model_path.is_dir() else None
+    if adapter_config is not None and adapter_config.is_file():
+        try:
+            from peft import PeftModel
+        except ImportError as exc:
+            raise SystemExit("This checkpoint is a LoRA adapter; install peft from requirements-sft.txt") from exc
+        config = json.loads(adapter_config.read_text(encoding="utf-8"))
+        base_model = config.get("base_model_name_or_path")
+        if not isinstance(base_model, str) or not base_model:
+            raise SystemExit("LoRA adapter_config.json has no base_model_name_or_path")
+        tokenizer = AutoTokenizer.from_pretrained(str(model_path), trust_remote_code=False)
+        base = AutoModelForCausalLM.from_pretrained(base_model, trust_remote_code=False)
+        model = PeftModel.from_pretrained(base, str(model_path))
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=False)
+        model = AutoModelForCausalLM.from_pretrained(args.model, trust_remote_code=False)
     if args.device == "auto":
         device = "cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
     else:
