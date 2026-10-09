@@ -107,3 +107,12 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ```
 
 此脚本只检查结构和数据拆分，不证明目标答案正确、来源许可有效或模型训练成功。只有带有可靠独立标签的数据才应进入监督训练。
+
+
+## 自有 AI 架构研究（主方向）
+
+本项目目标不是只给现成大模型添加插件，而是研究持续学习、任务相关计算、受限工作集和可恢复状态共同组成的自有 AI 架构。当前设计基线：
+- [自学习架构与运行平台设计](docs/SELF_LEARNING_ARCHITECTURE.md)
+- [自有模型工件格式 v0 草案](docs/ARTIFACT_FORMAT_V0.md)
+
+这些是设计基线，不代表机制已经实现。现有 GGUF/Ornith 工作流只作为教师或比较基线。先把学习闭环、格式原型和资源测量做成可验证实现，再扩大模型和接入 Android；不提前锁定任何现成模型格式。
