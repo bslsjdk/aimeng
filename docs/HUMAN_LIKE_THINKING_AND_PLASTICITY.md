@@ -453,3 +453,16 @@ def run_task(task, core_model, stores, verifiers, budget):
 **先允许想法自由，再要求证据严格；先让经验改变下一次行为，再尝试改变参数；先验证可复用 adapter，再研究真正动态神经元；任何变化都可追溯、可测量、可拒绝、可回滚。**
 
 这套规格的成功标准不是“模型说自己像人”，而是它能在固定实验中提出更多有差异的可检验方案、发现自己的错误、把有效经验迁移到新任务，并在不破坏旧能力与资源边界的前提下复用经过验证的计算模块。
+
+
+## 16. Initial repository implementation status
+
+The first software-contract layer has now been added on the research branch:
+- `schemas/idea_record.schema.json`: idea records with explicit assumptions, predictions, counterexamples, epistemic status, provenance, and scoped verification result.
+- `schemas/plastic_module.schema.json`: module manifest contract; an `accepted` module requires a passing validation status, evaluation report reference, and rollback target.
+- `scripts/validate_idea_records.py`: JSONL structural validator; `verified_for_scope` requires a passing verifier result, verifier identity/version, scope, and evidence references.
+- `scripts/idea_cycle_state.py`: atomic JSON checkpoint writes, legal state transitions, recoverable failure/resume, artifact hashes, and bounded counters. It does not call a model or modify weights.
+- `tests/test_idea_records.py` and `tests/test_idea_cycle_state.py`: contract and state-machine tests.
+- `.github/workflows/idea-cycle-tests.yml`: CI job for schema JSON parsing and those unit tests.
+
+These are the initial contracts and persistence layer, not the complete thinking runtime. They have not yet been confirmed by a successful CI run in this document. Next, connect a real core-model adapter to idea generation/critique, add independent verifier adapters, create a fixed evaluation suite, and only later implement isolated adapter training and module loading. No dynamic neuron growth, model-weight update, real backend integration, or Android memory result is claimed at this stage.
