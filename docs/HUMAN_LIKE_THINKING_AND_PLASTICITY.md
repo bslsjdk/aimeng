@@ -498,3 +498,29 @@ For high-impact promotion, use a second independent check or human review where 
 The branch now contains schemas/learning_signal.schema.json, scripts/build_correction_feedback.py, tests/test_correction_feedback.py, and a CI step for these tests. The feedback builder maps a failure to revision plus re-verification; maps inconclusive/unavailable to gathering more evidence; and treats pass as scoped success. It explicitly authorizes neither weight updates nor memory promotion.
 
 This is not yet an end-to-end learning system: the core-model adapter does not yet call this builder, real verifier integrations are not claimed, no improvement in repair rate has been measured, and no weights are updated. The next unit is an immutable correction-trace record, verifier adapters, and a fixed benchmark for first-pass success, repair rate, repeated-error rate, held-out transfer, regressions, latency, and peak runtime RAM.
+
+
+## 18. Immutable correction traces and promotion invariants
+
+The correction trace contract now has a dedicated schema and validator:
+- `schemas/correction_trace.schema.json` defines versioned artifact and verifier-signal references, attribution hypotheses, status, scope, limitations, and provenance.
+- `scripts/validate_correction_trace.py` enforces cross-field invariants that ordinary JSON Schema cannot conveniently express.
+- `tests/test_correction_trace.py` exercises invalid promotion attempts and artifact-binding errors.
+- CI parses the schema and runs the correction-trace tests.
+
+### Hard invariants
+
+1. The initial verifier signal must target the exact initial artifact SHA-256.
+2. A correction must have a different artifact hash; changing only a label is not a new revision.
+3. `verified_correction` requires an initial `fail`, a versioned correction artifact, and a later `pass` signal that targets the correction artifact hash.
+4. The recheck must use the same declared scope as the initial check before this trace can claim a verified correction. A broader claim requires its own evidence.
+5. `failed_correction` requires a new artifact and a recheck that fails with evidence.
+6. `inconclusive` and `unavailable` are not success or failure. They cannot satisfy the verified-correction gate.
+7. Attribution hypotheses remain hypotheses. The model's explanation is not automatically accepted as the true root cause.
+8. The trace validator checks record consistency, not whether external references exist or whether their bytes match the recorded hashes. An artifact store and verifier integration must establish those facts independently.
+
+### What this unlocks, and what it does not
+
+This makes the software contract for an error-to-correction history more precise and makes several false-success states testable. It does not yet invoke the core model, run a real verifier, make trace records immutable at the storage layer, or promote memories/modules. The word “immutable” currently means append-only/versioned design intent; a production store still needs write-once records or tamper-evident event chaining, access controls, and atomic persistence.
+
+Next experimental gate: run the full repository test suite in CI, then add a real, narrowly scoped verifier adapter and a fixed benchmark. Measure first-pass success, successful repair rate, repeated-error rate, held-out transfer, regression rate, latency, and peak runtime RAM. Do not claim learning improvement until a controlled comparison shows it.
