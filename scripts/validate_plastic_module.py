@@ -32,11 +32,11 @@ def validate_manifest(row: object) -> list[str]:
                 "training_data_fingerprint", "eval_suite_fingerprint"):
         if not isinstance(row.get(key), str) or not row[key].strip():
             errors.append(f"{key} must be a non-empty string")
-    if row.get("status") not in STATUSES:
+    if not isinstance(row.get("status"), str) or row.get("status") not in STATUSES:
         errors.append("invalid status")
-    if row.get("module_type") not in MODULE_TYPES:
+    if not isinstance(row.get("module_type"), str) or row.get("module_type") not in MODULE_TYPES:
         errors.append("invalid module_type")
-    if row.get("validation_status") not in VALIDATION:
+    if not isinstance(row.get("validation_status"), str) or row.get("validation_status") not in VALIDATION:
         errors.append("invalid validation_status")
     for key in ("input_contract", "output_contract", "resource_cost", "validated_scope"):
         if not isinstance(row.get(key), dict):
