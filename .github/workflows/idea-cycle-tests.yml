@@ -8,14 +8,17 @@ on:
       - "scripts/validate_idea_records.py"
       - "scripts/validate_plastic_module.py"
       - "scripts/build_correction_feedback.py"
+      - "scripts/validate_correction_trace.py"
       - "schemas/idea_record.schema.json"
       - "schemas/plastic_module.schema.json"
       - "schemas/task_state.schema.json"
       - "schemas/learning_signal.schema.json"
+      - "schemas/correction_trace.schema.json"
       - "tests/test_idea_records.py"
       - "tests/test_idea_cycle_state.py"
       - "tests/test_plastic_module_manifest.py"
       - "tests/test_correction_feedback.py"
+      - "tests/test_correction_trace.py"
       - ".github/workflows/idea-cycle-tests.yml"
   pull_request:
     paths:
@@ -51,6 +54,7 @@ jobs:
           python -m json.tool schemas/plastic_module.schema.json >/dev/null
           python -m json.tool schemas/task_state.schema.json >/dev/null
           python -m json.tool schemas/learning_signal.schema.json >/dev/null
+          python -m json.tool schemas/correction_trace.schema.json >/dev/null
       - name: Run idea record contract tests
         run: python -m unittest discover -s tests -p 'test_idea_records.py'
       - name: Run durable state machine tests
@@ -61,3 +65,5 @@ jobs:
 
       - name: Run external error-signal feedback tests
         run: python -m unittest discover -s tests -p 'test_correction_feedback.py'
+      - name: Run correction trace invariant tests
+        run: python -m unittest discover -s tests -p 'test_correction_trace.py'
