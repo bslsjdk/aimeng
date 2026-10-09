@@ -39,7 +39,7 @@
   "content": "一个明确的知识点或步骤",
   "scope": ["适用范围"],
   "teacher": {
-    "model": "Ornith-1.5-9B-Q4_K_M",
+    "model": "Ornith-1.5-9B-MLX-4bit（实际教师由 ai 运行时配置确认）",
     "model_sha256": "由调用程序填入真实模型文件 SHA-256",
     "prompt_version": "knowledge-extract-v1"
   },
