@@ -13,11 +13,13 @@ AIMENG investigates one unified core model that can adapt the amount of computat
 
 These are distinct mechanisms. Skipping computation does not necessarily unload weights; paging weights does not necessarily reduce total FLOPs; increasing available parameters does not guarantee better answers.
 
-## 2. Relation to MoE
+## 2. Relation to MoE and the neuron-level hypothesis
 
-This is not a claim that every MoE is inferior. Conventional sparse MoE typically routes tokens or activations through a fixed collection of experts. AIMENG's research question is broader: can a model coordinate a variable compute graph and a bounded, dynamically managed parameter working set, potentially at finer granularity than whole experts, while preserving coherent behavior?
+This project does not categorically reject MoE. Routing can be one useful mechanism, but it is not the whole research target. The broader hypothesis is a single unified model with a very large population of computational units whose participation, working-set size, memory residency, and reasoning policy can adapt to the current task.
 
-The design may use routing-like decisions as one component. It must not assume that arbitrary individual weights can be removed without changing model function. Useful units must preserve computational dependencies and valid tensor shapes.
+The intended direction is more dynamic than selecting one or several fixed experts: the model should be able to choose how much of its available computational substrate to use, which valid pathways to execute, which associated parameters to keep resident, and when to stop expanding because added capacity is not worth its cost. This is a research hypothesis, not a claim that such a system is already implemented or guaranteed to outperform MoE.
+
+A neuron-level conceptual model does not imply that individual neurons are independently loadable in current inference engines. Computation activation, parameter residency, and topology changes are separate controls. Implementation units must respect tensor dependencies, normalization, residual paths, quantization metadata, and backend-supported execution granularity.
 
 ## 3. Unified-model invariant
 
@@ -173,3 +175,38 @@ python scripts/simulate_parameter_workspace.py --input plan.json --output runs/w
 ```
 
 This is intentionally a **trace-only simulation**. It validates scheduler logic and produces simulated resident-byte accounting, but it does not touch model weights, release OS memory, measure Android RAM, or skip actual model computation. Its success is only a prerequisite for a real backend integration, not evidence of runtime speedup or memory reduction.
+
+
+## 13. Neuron-population control: the intended long-term model
+
+The long-term hypothesis is a single model containing a very large computational substrate. A task should not automatically activate the entire substrate. The model should adapt its effective working capacity and reasoning procedure to the task, while preserving one coherent model state and one user-facing reasoning process.
+
+### 13.1 Four controls, not one vague activation switch
+
+1. **Participation control**: select which neurons, channels, blocks, or computational paths contribute to the current step. The smallest unit must be supported by the actual architecture and backend.
+2. **Memory control**: decide which parameter blocks are resident, which are fetched from storage, and which can be evicted after their final in-flight use. Participation masks alone do not release weight memory.
+3. **Reasoning-policy control**: choose among direct response, decomposition, broad association, counterexample search, tool-assisted checking, or deeper iterative reasoning. These are execution modes of the same core model, not separate AI agents.
+4. **Plasticity control**: if repeated evidence shows a capability gap, propose a candidate adapter/subgraph or, in later research, a topology change. Keep it isolated until independent evaluation and regression gates pass.
+
+### 13.2 A bounded feedback loop
+
+For each task, estimate a starting compute and memory budget; activate a dependency-valid path; observe task progress, verifier evidence, latency, and memory; then choose among continue, expand, switch strategy, stop, or abstain. Expansion must have a measurable reason and remain within the hard resource budget. The model's own confidence may be one feature, never the sole authority.
+
+A failed attempt does not automatically mean “add neurons.” First distinguish missing knowledge, an unsuitable reasoning strategy, a bad tool call, an ambiguous task, a verifier failure, and a resource limit. Only evidence consistent with a capability gap should trigger a capacity-growth trial.
+
+### 13.3 Do not confuse logical neurons with physical memory pages
+
+The design must track at least three different quantities:
+- active compute units for the current operation;
+- parameter bytes actually resident in each memory domain;
+- total available model/module artifact size on storage.
+
+These values can differ dramatically. For example, masking channels can reduce executed operations only if the backend really skips them; it may leave all weights resident. Paging weights can reduce resident memory while increasing I/O and latency. A neuron may share tensors with many other neurons and therefore cannot be unloaded independently.
+
+Start with the smallest units that the actual backend can load and execute efficiently. Fine-grained neuron/connection activation is a later experimental target, not a software promise.
+
+### 13.4 Evidence required to support the hypothesis
+
+Compare fixed compute, dynamic compute only, dynamic residency only, and combined control under matched task sets and quality thresholds. Record actual operation counts where available, resident/peak memory, load bytes, cold/warm latency, quality, first-pass success, repair success, held-out transfer, and regressions. Include a no-growth baseline and a growth-enabled candidate arm.
+
+The hypothesis is supported only if dynamic control preserves or improves task quality while demonstrating a real, measured resource benefit. A bigger neuron count, a more complicated diagram, or the model claiming it “thought harder” is not evidence.
