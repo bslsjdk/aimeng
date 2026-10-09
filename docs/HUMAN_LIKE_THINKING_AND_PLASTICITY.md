@@ -459,10 +459,11 @@ def run_task(task, core_model, stores, verifiers, budget):
 
 The first software-contract layer has now been added on the research branch:
 - `schemas/idea_record.schema.json`: idea records with explicit assumptions, predictions, counterexamples, epistemic status, provenance, and scoped verification result.
-- `schemas/plastic_module.schema.json`: module manifest contract; an `accepted` module requires a passing validation status, evaluation report reference, and rollback target.
+- `schemas/plastic_module.schema.json` + `scripts/validate_plastic_module.py`: module manifest contract and executable acceptance gate; an `accepted` module requires a passing validation status, non-empty evaluation scope/report reference, and rollback target.
+- `schemas/task_state.schema.json`: persistent task-state document contract.
 - `scripts/validate_idea_records.py`: JSONL structural validator; `verified_for_scope` requires a passing verifier result, verifier identity/version, scope, and evidence references.
 - `scripts/idea_cycle_state.py`: atomic JSON checkpoint writes, legal state transitions, recoverable failure/resume, artifact hashes, and bounded counters. It does not call a model or modify weights.
-- `tests/test_idea_records.py` and `tests/test_idea_cycle_state.py`: contract and state-machine tests.
+- `tests/test_idea_records.py`, `tests/test_idea_cycle_state.py`, and `tests/test_plastic_module_manifest.py`: contract, state-machine, and module-promotion tests.
 - `.github/workflows/idea-cycle-tests.yml`: CI job for schema JSON parsing and those unit tests.
 
 These are the initial contracts and persistence layer, not the complete thinking runtime. They have not yet been confirmed by a successful CI run in this document. Next, connect a real core-model adapter to idea generation/critique, add independent verifier adapters, create a fixed evaluation suite, and only later implement isolated adapter training and module loading. No dynamic neuron growth, model-weight update, real backend integration, or Android memory result is claimed at this stage.
