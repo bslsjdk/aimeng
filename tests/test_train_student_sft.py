@@ -8,7 +8,7 @@ class GateTests(unittest.TestCase):
         for row in rows: f.write(json.dumps(row)+"\n")
         f.close(); self.addCleanup(Path(f.name).unlink, missing_ok=True); return Path(f.name)
     def row(self, sid, status="verified", eligible=True, split="train"):
-        return {"sample_id":sid,"verification":{"status":status},"training_eligible":eligible,"split":split,"messages":[{"role":"user","content":"Q"},{"role":"assistant","content":"A"}]}
+        return {"schema_version":"aimeng.sft_candidate.v1","sample_id":sid,"verification":{"status":status,"method":"test_fixture","evidence":["unit-test-fixture"] if status=="verified" else []},"training_eligible":eligible,"split":split,"messages":[{"role":"user","content":"Q"},{"role":"assistant","content":"A"}]}
     def test_pending_is_not_loaded(self):
         p=self.write([self.row("a",status="pending",eligible=False)])
         self.assertEqual(load_records(p,"train"),[])
