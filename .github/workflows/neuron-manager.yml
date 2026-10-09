@@ -1,0 +1,35 @@
+name: Neuron Manager
+
+on:
+  push:
+    branches: [feat/neuron-management-observability]
+    paths:
+      - "scripts/neuron_manager.py"
+      - "tests/test_neuron_manager.py"
+      - "docs/NEURON_MANAGER.md"
+      - ".github/workflows/neuron-manager.yml"
+  pull_request:
+    paths:
+      - "scripts/neuron_manager.py"
+      - "tests/test_neuron_manager.py"
+      - "docs/NEURON_MANAGER.md"
+      - ".github/workflows/neuron-manager.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-artifact-manager-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile manager and tests
+        run: python -m py_compile scripts/neuron_manager.py tests/test_neuron_manager.py
+      - name: Run manager regression suite
+        run: python -m unittest discover -s tests -p 'test_neuron_manager.py' -v
+      - name: Check CLI help
+        run: python scripts/neuron_manager.py --help
