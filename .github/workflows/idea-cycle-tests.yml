@@ -6,21 +6,25 @@ on:
     paths:
       - "scripts/idea_cycle_state.py"
       - "scripts/validate_idea_records.py"
+      - "scripts/validate_plastic_module.py"
       - "schemas/idea_record.schema.json"
       - "schemas/plastic_module.schema.json"
       - "schemas/task_state.schema.json"
       - "tests/test_idea_records.py"
       - "tests/test_idea_cycle_state.py"
+      - "tests/test_plastic_module_manifest.py"
       - ".github/workflows/idea-cycle-tests.yml"
   pull_request:
     paths:
       - "scripts/idea_cycle_state.py"
       - "scripts/validate_idea_records.py"
+      - "scripts/validate_plastic_module.py"
       - "schemas/idea_record.schema.json"
       - "schemas/plastic_module.schema.json"
       - "schemas/task_state.schema.json"
       - "tests/test_idea_records.py"
       - "tests/test_idea_cycle_state.py"
+      - "tests/test_plastic_module_manifest.py"
       - ".github/workflows/idea-cycle-tests.yml"
   workflow_dispatch:
 
@@ -44,3 +48,6 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_idea_records.py'
       - name: Run durable state machine tests
         run: python -m unittest discover -s tests -p 'test_idea_cycle_state.py'
+
+      - name: Run plastic module manifest gate tests
+        run: python -m unittest discover -s tests -p 'test_plastic_module_manifest.py'
