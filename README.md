@@ -190,3 +190,6 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 新增 [动态参数激活与加载架构规格](docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md)。研究目标不是简单拒绝 MoE，而是让**一个统一核心模型**联合管理可变计算图、动态参数驻留工作集和经过验证的能力扩展。必须分别实验“哪些运算执行”“哪些参数驻留内存”“新增结构是否提升能力”，不能把路由、卸载或增加参数直接当成性能/智能提升。
 
 实现路线按风险递增：状态机与资源预算模拟 → 后端支持的块/层按需加载与实测 → 真正的动态计算激活 → 候选 adapter/子图验证与回滚 → 有证据后再研究更细粒度神经元/连接动态化。Android 整应用峰值 RAM 必须低于 4096 MiB，目标晋级门低于 3800 MiB。当前这份文件是研究规格，不代表参数分页或动态神经元已经实现。
+
+
+首个可执行原型已加入：`scripts/simulate_parameter_workspace.py`，测试位于 `tests/test_parameter_workspace_simulation.py`。它模拟参数单元依赖、驻留字节预算、LRU 淘汰、使用中保护、延迟卸载和加载失败回滚，CI 已加入相应测试。它只是调度逻辑模拟，**不加载真实权重、不释放系统内存，也不证明推理计算量或延迟下降**。示例计划与命令见 [动态参数激活与加载架构规格第 12 节](docs/DYNAMIC_PARAMETER_ACTIVATION_AND_LOADING.md#12-first-executable-artifact-trace-only-workspace-simulator)。
