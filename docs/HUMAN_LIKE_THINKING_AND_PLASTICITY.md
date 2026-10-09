@@ -524,3 +524,23 @@ The correction trace contract now has a dedicated schema and validator:
 This makes the software contract for an error-to-correction history more precise and makes several false-success states testable. It does not yet invoke the core model, run a real verifier, make trace records immutable at the storage layer, or promote memories/modules. The word “immutable” currently means append-only/versioned design intent; a production store still needs write-once records or tamper-evident event chaining, access controls, and atomic persistence.
 
 Next experimental gate: run the full repository test suite in CI, then add a real, narrowly scoped verifier adapter and a fixed benchmark. Measure first-pass success, successful repair rate, repeated-error rate, held-out transfer, regression rate, latency, and peak runtime RAM. Do not claim learning improvement until a controlled comparison shows it.
+
+
+## 19. First executable verifier adapter: file integrity
+
+`scripts/verify_artifact_integrity.py` is the first runnable adapter that emits the existing `aimeng.learning_signal.v1` contract from a real deterministic check. It streams a file through SHA-256, compares it with a pre-recorded expected digest, writes a separate evidence report, and emits a pass/fail signal bound to the observed artifact hash. `tests/test_artifact_integrity_verifier.py` covers matching hashes, mismatches, malformed expected hashes, and missing files; CI runs those tests.
+
+Example:
+
+```bash
+python scripts/verify_artifact_integrity.py \
+  --artifact path/to/artifact.bin \
+  --expected-sha256 EXPECTED_64_HEX_DIGEST \
+  --task-id task-001 \
+  --evidence-out runs/evidence.json \
+  --signal-out runs/learning-signal.json
+```
+
+Exit codes: 0 means the digest matched, 1 means a valid check found a mismatch, and 2 means the check could not be performed because the input/IO was invalid. The expected digest must be recorded independently before the check; deriving it from the same current bytes would make the test meaningless.
+
+This adapter verifies **byte integrity only**, not factual correctness, code behavior, safety, or whether an artifact is a good answer. It is deliberately small so the feedback and trace pipeline can be exercised without running untrusted code. The next verifier adapters should be narrow and task-specific, such as parsing a known test report or checking a deterministic mathematical invariant. Never run arbitrary submitted code on the host just to obtain a learning signal; use an isolated sandbox with resource limits before adding such an adapter.
