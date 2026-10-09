@@ -146,4 +146,4 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 ## 一键训练入口
 
-日常训练请优先使用 [一键学生训练流水线](docs/ONE_COMMAND_TRAINING.md)：`scripts/run_student_pipeline.py` 会自动预检数据、运行原模型基线评测、执行 SFT、评测候选模型并保存输入快照与分步日志。它会在关键门槛失败时停止，不覆盖已有运行。Android 整应用内存必须另行实测，训练成功不会自动晋级模型。
+日常训练请优先使用 [一键学生训练流水线](docs/ONE_COMMAND_TRAINING.md)：`scripts/run_student_pipeline.py` 默认使用 LoRA 进行参数高效微调，并自动预检数据、运行原模型基线评测、执行 SFT、评测候选模型及保存输入快照与分步日志；需要全量微调时显式传入 `--full-finetune`。它会在关键门槛失败时停止，不覆盖已有运行。Android 整应用内存必须另行实测，训练成功不会自动晋级模型。
