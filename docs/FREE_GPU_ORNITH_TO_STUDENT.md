@@ -1,3 +1,20 @@
+# External Agent teacher → AIMENG student workflow
+
+**Preferred low-GPU-cost route:** use Yuanbao Agent (or another authorized external agent with tools) to generate candidate demonstrations in bounded batches. This consumes the agent provider's resources rather than the training GPU. Reserve the free CUDA GPU for student training. The local Ornith GGUF/llama.cpp generator remains an optional fallback if external-agent output is unavailable or insufficient.
+
+Ready-to-use batch contract: [`prompts/yuanbao_teacher_batch_agent.md`](../prompts/yuanbao_teacher_batch_agent.md). It specifies 20 records per batch, JSONL schema, unique IDs, resumable manifest, quality checks, and strict pending/ineligible status. For a 50-step tool budget, do not spend all steps on generation: reserve steps for reading progress, validating JSON/schema, writing files, re-reading them, and updating the manifest.
+
+## Recommended flow
+
+1. Give Yuanbao Agent the batch contract. Ask it to generate 20 records and save both a JSONL file and `batch_manifest.json` using its available file tools. If it cannot write files, have it return the complete JSONL content in manageable chunks for saving.
+2. After each batch, confirm the file exists and the manifest's record count matches the actual lines. Continue from `next_batch_index`; never regenerate completed IDs or overwrite previous batches.
+3. Import each batch with `scripts/import_teacher_demos.py`. The importer resets every record to pending, unassigned, and ineligible regardless of what the external agent claims.
+4. Independently verify candidate answers, remove duplicates, then assign leakage-safe train/validation/test splits. Keep evaluation questions separate from generated training prompts.
+5. Only after enough verified examples and frozen eval suites exist, open the free GPU session, train the student, evaluate it, and measure Android app RAM separately.
+
+External Agent generation is not a verification oracle. For code, run tests; for calculations, independently recompute; for facts, check trustworthy sources; for open-ended answers, review quality. A large unreviewed dataset is just a large pile of potential errors.
+
+---
 # Free-GPU Ornith teacher → AIMENG student workflow
 
 This workflow uses the official **quantized GGUF teacher** `ornith-ai/Ornith-1.5-9B-GGUF:Q4_K_M` through llama.cpp, instead of loading the ~19 GB BF16 Transformers checkpoint and quantizing it at runtime. The official Q4_K_M file is about 5.78 GB on disk; that is not the same as total runtime RAM/VRAM. Official model files and llama.cpp usage are documented at https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF.
