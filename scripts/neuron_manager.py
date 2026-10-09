@@ -289,7 +289,7 @@ def run(args: argparse.Namespace) -> dict:
                     "quality": quality, "artifact": snapshot.name,
                     "sha256": sha256_file(snapshot), "source_sha256": neuron["sha256"],
                     "saved_at_unix": time.time(), "evaluation_mse": score["mse"]
-                }, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+                }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 neuron["last_saved_snapshot"] = str(snapshot)
                 neuron["last_evaluation"] = score
                 neuron["quality"] = quality
