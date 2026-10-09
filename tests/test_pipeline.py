@@ -17,6 +17,7 @@ collector = load_module("collector", "scripts/collect_budget_traces.py")
 trainer = load_module("trainer", "scripts/train_budget_controller.py")
 validator = load_module("validator", "scripts/validate_telemetry.py")
 evaluator = load_module("evaluator", "scripts/evaluate_budget_controller.py")
+adaptation = load_module("adaptation", "scripts/online_adaptation.py")
 
 
 class CollectorTests(unittest.TestCase):
@@ -77,6 +78,63 @@ class TrainingTargetTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(len(examples), 1)
         self.assertEqual(examples[0]["target"], "medium")
+
+
+
+class OnlineAdaptationTests(unittest.TestCase):
+    def test_verified_failure_escalates_only_with_memory_headroom(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "fail", "status": "completed",
+            "whole_app_pss_mib": 2500,
+        })
+        self.assertEqual(decision["action"], "retry_with_higher_budget")
+        self.assertEqual(decision["next_budget"], "medium")
+        self.assertFalse(decision["persistent_update"])
+
+    def test_unknown_feedback_never_becomes_retry_label(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "unknown", "status": "completed",
+            "whole_app_pss_mib": 2000,
+        })
+        self.assertEqual(decision["action"], "stop_for_reliable_feedback")
+        self.assertIsNone(decision["next_budget"])
+
+    def test_missing_memory_measurement_blocks_escalation(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "fail", "status": "completed",
+            "whole_app_pss_mib": None,
+        })
+        self.assertEqual(decision["action"], "stop_for_memory_measurement")
+
+    def test_memory_headroom_gate_stops_before_hard_limit(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "fail", "status": "completed",
+            "whole_app_pss_mib": 3600,
+        })
+        self.assertEqual(decision["action"], "stop_for_memory_headroom")
+
+    def test_hard_memory_limit_is_never_overridden_by_quality(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "pass", "status": "completed",
+            "whole_app_pss_mib": 4096,
+        })
+        self.assertEqual(decision["action"], "stop_and_flag_memory_violation")
+
+    def test_full_budget_failure_stops(self):
+        decision = adaptation.decide_next_action({
+            "budget": "full", "quality_label": "fail", "status": "completed",
+            "whole_app_pss_mib": 2500,
+        })
+        self.assertEqual(decision["action"], "stop_quality_failure")
+        self.assertIsNone(decision["next_budget"])
+
+    def test_timeout_does_not_escalate_budget(self):
+        decision = adaptation.decide_next_action({
+            "budget": "small", "quality_label": "unknown", "status": "timeout",
+            "whole_app_pss_mib": 2000,
+        })
+        self.assertEqual(decision["action"], "stop_and_record_failure")
+        self.assertIsNone(decision["next_budget"])
 
 
 class TelemetryValidatorTests(unittest.TestCase):
