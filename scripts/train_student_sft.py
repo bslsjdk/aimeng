@@ -22,6 +22,12 @@ def load_records(path: Path, split: str) -> list[dict[str, Any]]:
             v=row.get("verification",{})
             if row.get("training_eligible") is not True or v.get("status") != "verified":
                 continue
+            if not v.get("method") or not isinstance(v.get("evidence"), list) or not v["evidence"]:
+                raise ValueError(f"{path}:{n}: verified eligible row requires verification method and evidence")
+            if row.get("schema_version") != "aimeng.sft_candidate.v1":
+                raise ValueError(f"{path}:{n}: unsupported schema_version")
+            if row.get("split") not in {"train", "validation", "test"}:
+                raise ValueError(f"{path}:{n}: eligible row needs an explicit split")
             if row.get("split") != split: continue
             messages=row.get("messages")
             if not isinstance(messages,list) or not any(m.get("role")=="user" for m in messages) or not any(m.get("role")=="assistant" for m in messages):
