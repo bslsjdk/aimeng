@@ -51,6 +51,32 @@ class NeuronManagerTests(unittest.TestCase):
         base.update(kwargs)
         return type("Args", (), base)()
 
+    def test_import_registers_only_a_valid_real_artifact(self):
+        fresh_registry = self.root / "new-registry.json"
+        fresh_log = self.root / "new-runs" / "manager.jsonl"
+        args = type("Args", (), {
+            "registry": str(fresh_registry), "root": str(self.root), "log": str(fresh_log),
+            "command": "import", "id": "N-010", "artifact": str(self.a), "revision": 1
+        })()
+        result = manager.run(args)
+        self.assertTrue(result["ok"])
+        data = json.loads(fresh_registry.read_text(encoding="utf-8"))
+        self.assertEqual([n["id"] for n in data["neurons"]], ["N-010"])
+        self.assertEqual(data["neurons"][0]["origin"], "user_import")
+        self.assertEqual(data["neurons"][0]["sha256"], manager.sha256_file(self.a))
+
+    def test_import_rejects_non_neuron_file(self):
+        invalid = self.root / "not-a-neuron.json"
+        invalid.write_text('{"hello":"world"}', encoding="utf-8")
+        args = type("Args", (), {
+            "registry": str(self.root / "registry-new.json"), "root": str(self.root),
+            "log": str(self.logs), "command": "import", "id": "N-011",
+            "artifact": str(invalid), "revision": 1
+        })()
+        result = manager.run(args)
+        self.assertFalse(result["ok"])
+        self.assertFalse((self.root / "registry-new.json").exists())
+
     def test_no_fake_neurons_when_registry_missing_and_failure_is_logged(self):
         self.registry.unlink()
         result = manager.run(self.args("list"))
