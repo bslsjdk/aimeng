@@ -81,7 +81,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
     cmd = [
         cli, "-m", model_path, "-p", str(task["prompt"]),
         "-c", str(budget["n_ctx"]), "-n", str(budget["max_tokens"]),
-        "-b", str(budget["n_batch"]),
+        "-b", str(budget.get("n_batch", 128)),
         "-t", str(budget["threads"]), "--no-display-prompt", "--no-warmup",
     ]
     if budget.get("gpu_layers", 0) > 0:
@@ -173,7 +173,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
             "n_ctx_actual": None,
             "n_gpu_layers_requested": budget.get("gpu_layers", 0),
             "n_gpu_layers_actual": None,
-            "n_batch_requested": budget["n_batch"],
+            "n_batch_requested": budget.get("n_batch", 128),
             "n_batch_actual": None,
             "max_tokens": budget["max_tokens"],
             "threads": budget["threads"],
