@@ -1,5 +1,4 @@
-# Ornith-1.5-9B CUDA teacher inference environment.
-# Install a CUDA-compatible PyTorch build from the notebook runtime first; do not replace it blindly.
-transformers>=5.8.1,<6
-accelerate>=1.0
-bitsandbytes>=0.46.1
+# Teacher generation uses the llama.cpp executable, not Transformers/bitsandbytes.
+# Install/use a CUDA-enabled llama.cpp build with llama-server on PATH.
+# Do not pip-install a second CUDA/PyTorch stack just for teacher inference.
+# Student-training Python dependencies are managed separately by the SFT requirements file.
