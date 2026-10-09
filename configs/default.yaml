@@ -3,12 +3,16 @@ project:
   schema_version: 1
 
 model:
-  # Set AIMENG_MODEL_GGUF in the environment; never commit model weights.
+  source: huggingface
+  repo_id: ornith-ai/Ornith-1.5-9B-GGUF
+  filename: Ornith-1.5-9B-Q4_K_M.gguf
   path_env: AIMENG_MODEL_GGUF
-  expected_family: unknown_until_inspected
+  expected_family: qwen35
   expected_parameters_billions: 9
-  expected_quantization: Q4
+  expected_quantization: Q4_K_M
   sha256_required_for_reproducible_runs: true
+  role: frozen_teacher_and_inference_baseline
+  train_quantized_gguf_weights_directly: false
 
 runtime_constraints:
   # Whole Android application hard ceiling, not a target to fill.
@@ -27,7 +31,6 @@ routing:
   never_assume_skipped_channels_reduce_memory_without_backend_measurement: true
 
 reward:
-  # Quality is a gate, not something that can be traded away for speed.
   quality_gate_required: true
   optimize:
     - task_quality
