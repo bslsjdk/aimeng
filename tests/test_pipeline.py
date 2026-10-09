@@ -275,6 +275,8 @@ class ExperienceLearningTests(unittest.TestCase):
             {"task_family": "math", "strategy": "direct", "quality_label": "pass", "latency_ms": 100.0},
             {"task_family": "math", "strategy": "decompose", "quality_label": "fail", "latency_ms": 1.0},
             {"task_family": "math", "strategy": "decompose", "quality_label": "fail", "latency_ms": 1.0},
+            {"task_family": "math", "strategy": "verify", "quality_label": "fail", "latency_ms": 2.0},
+            {"task_family": "math", "strategy": "verify", "quality_label": "fail", "latency_ms": 2.0},
         ]
         self.assertEqual(experience.choose_strategy("math", rows)["strategy"], "direct")
 
