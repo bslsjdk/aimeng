@@ -71,16 +71,37 @@ def choose_strategy(
     """Pick the best independently verified strategy, or safe direct baseline."""
     if min_samples < 1:
         raise ValueError("min_samples must be >= 1")
-    candidates: list[dict[str, Any]] = []
-    for strategy in STRATEGIES:
-        rows = [
+    by_strategy = {
+        strategy: [
             row for row in experiences
             if row.get("task_family") == task_family
             and row.get("strategy") == strategy
             and row.get("quality_label") in {"pass", "fail"}
         ]
-        if len(rows) < min_samples:
-            continue
+        for strategy in STRATEGIES
+    }
+    total = sum(len(rows) for rows in by_strategy.values())
+    if total == 0:
+        return {"strategy": "direct", "reason": "insufficient_verified_history", "samples": 0}
+
+    # Deliberately explore under-sampled strategies; otherwise a direct-only
+    # bootstrap would never collect evidence about alternatives.
+    under_sampled = [
+        (len(rows), index, strategy)
+        for index, strategy in enumerate(STRATEGIES)
+        for rows in [by_strategy[strategy]]
+        if len(rows) < min_samples
+    ]
+    if under_sampled:
+        count, _, strategy = min(under_sampled)
+        return {
+            "strategy": strategy,
+            "reason": "explore_under_sampled_strategy",
+            "samples": count,
+        }
+
+    candidates: list[dict[str, Any]] = []
+    for strategy, rows in by_strategy.items():
         pass_rate = sum(row["quality_label"] == "pass" for row in rows) / len(rows)
         measured = [
             float(row["latency_ms"]) for row in rows
