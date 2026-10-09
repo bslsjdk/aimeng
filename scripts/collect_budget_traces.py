@@ -263,18 +263,42 @@ def main() -> int:
     if args.gpu_layers < 0:
         parser.error("--gpu-layers must be >= 0")
     budget_set = [dict(b, threads=args.threads, gpu_layers=args.gpu_layers) for b in BUDGETS]
-    with output_path.open("a" if args.append else "w", encoding="utf-8") as out:
+    completed_keys: set[tuple[str, str]] = set()
+    if args.resume and output_path.is_file():
+        with output_path.open("r", encoding="utf-8") as existing:
+            for line_no, raw in enumerate(existing, 1):
+                if not raw.strip():
+                    continue
+                try:
+                    old = json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    parser.error(f"cannot resume: invalid JSON at existing output line {line_no}: {exc.msg}")
+                if (old.get("result", {}).get("status") == "completed"
+                        and old.get("task_id") is not None
+                        and old.get("budget", {}).get("budget_id") is not None):
+                    completed_keys.add((str(old["task_id"]), str(old["budget"]["budget_id"])))
+    mode = "a" if (args.append or args.resume) else "w"
+    written = 0
+    skipped = 0
+    with output_path.open(mode, encoding="utf-8") as out:
         for index, task in enumerate(tasks, 1):
             for budget in budget_set:
+                key = (str(task["task_id"]), str(budget["budget_id"]))
+                if args.resume and key in completed_keys:
+                    skipped += 1
+                    continue
                 record = run_one(cli, args.model, task, budget, args.timeout,
                                  args.device_class, args.accelerator)
                 out.write(json.dumps(record, ensure_ascii=False) + "\n")
                 out.flush()
+                written += 1
+                if record["result"]["status"] == "completed":
+                    completed_keys.add(key)
                 print(f"[{index}/{len(tasks)}] task={task['task_id']} budget={budget['budget_id']} "
                       f"status={record['result']['status']} quality={record['result']['quality_label']} "
                       f"latency_ms={record['performance']['total_latency_ms']}")
-    action = "APPENDED" if args.append else "WROTE"
-    print(f"{action} {len(tasks) * len(budget_set)} records to {output_path}")
+    action = "APPENDED" if (args.append or args.resume) else "WROTE"
+    print(f"{action} {written} records to {output_path}; skipped {skipped} already-completed task/budget run(s)")
     print("Note: requested context is recorded; actual context, TTFT, GPU memory, and token throughput are null unless measured by another backend instrument.")
     return 0
 
