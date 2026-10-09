@@ -151,3 +151,8 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ## 免费 GPU：Ornith 教师生成 → 学生训练
 
 新增 [外部 Agent → 学生训练操作手册](docs/FREE_GPU_ORNITH_TO_STUDENT.md) 与 [元宝 Agent 可续跑批量生成规约](prompts/yuanbao_teacher_batch_agent.md)。优先让元宝等外部 Agent 分批生成 JSONL 候选，将免费 GPU 留给学生训练；规约默认每批 20 条，保存批次文件与 manifest，并严格保持 pending/unassigned/ineligible。官方 Ornith 9B Q4_K_M GGUF + CUDA `llama-server` 仍保留为可选本地教师回退路径，不再要求先用 GPU 生成数据。外部 Agent 生成的答案仍须独立核验，才能进入训练。
+
+
+## 人类式想法与可塑计算研究规格
+
+[人类式思考与可塑性实现规格](docs/HUMAN_LIKE_THINKING_AND_PLASTICITY.md)把自由联想、假设展开、自我质疑、独立验证、可恢复任务状态、临时参数适应、外部计算模块库、回滚与分阶段实验写成了可实现契约。方向仍是**单一统一核心模型，不采用 MoE**。该文档是实现规格，不代表动态神经元增长或人类式创造力已经实现；先完成可测试的软件闭环，再逐步实验 adapter 与真正的计算结构增长。
