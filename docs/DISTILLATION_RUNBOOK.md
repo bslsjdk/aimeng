@@ -109,3 +109,25 @@ python scripts/gate_student_release.py \
 默认要求 held-out 成功率至少提升 1 个百分点、回归套件下降不超过 1 个百分点、整应用 Android 峰值低于 3800 MiB（为 4096 MiB 硬上限留余量），并且两次使用同一评测套件哈希。任何字段缺失、套件不一致、质量不足或内存没有实测都会阻止晋级。失败时旧 pointer 不会被覆盖；决定文件仍会记录拒绝原因。阈值可调整，但 Android 上限参数绝不能设为 4096 MiB 或更高。
 
 此门只负责晋级判断和更新一个 JSON 指针，不会自动部署模型、执行手机测试或生成可信指标。内存数据必须来自目标手机整应用测量，而不是模型文件大小或训练机 RAM。
+
+
+## 8. 固定评测集执行器
+
+`scripts/evaluate_student_sft.py` 面向兼容的 Hugging Face causal LM，读取两个独立冻结的 JSONL 套件：held-out 迁移题与旧能力 regression 题。每行格式如下：
+
+```json
+{"schema_version":"aimeng.eval_task.v1","task_id":"python-exception-001","prompt":"What exception does int('x') raise? Answer with the exception class only.","expected":"ValueError","verifier":"exact_match"}
+```
+
+当前内置验证器为 `exact_match`、`contains` 和 `json_object`。对代码执行、复杂数学、事实来源和开放式任务，应扩展为真正独立的验证器，不能用宽松字符串匹配冒充正确性。
+
+```bash
+python scripts/evaluate_student_sft.py \
+  --model /path/to/student-checkpoint \
+  --model-version student-v1 \
+  --heldout eval/heldout.jsonl \
+  --regression eval/regression.jsonl \
+  --output runs/student-v1-metrics.json
+```
+
+输出会固定评测套件哈希并记录两组成功率，可交给 `scripts/gate_student_release.py`。评测执行器明确将内存测量字段标记为未测量，因此**不能单独触发晋级**；仍须在目标 Android 设备实测整应用峰值内存并写入同一候选指标文件。baseline 和 candidate 必须使用相同的两个冻结评测文件。
