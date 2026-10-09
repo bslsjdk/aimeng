@@ -3,17 +3,19 @@
   "provider": "Tencent Yuanbao Agent",
   "prompt_version": "aimeng_yuanbao_batch_v1",
   "batch_size_target": 20,
-  "last_completed_batch": 3,
-  "next_batch_index": 4,
-  "total_records_written": 60,
+  "last_completed_batch": 4,
+  "next_batch_index": 5,
+  "total_records_written": 80,
   "all_records_pending": true,
   "files": [
     "data/teacher_seed/yuanbao_batches/yuanbao_batch_0001.jsonl",
     "data/teacher_seed/yuanbao_batches/yuanbao_batch_0002.jsonl",
-    "data/teacher_seed/yuanbao_batches/yuanbao_batch_0003.jsonl"
+    "data/teacher_seed/yuanbao_batches/yuanbao_batch_0003.jsonl",
+    "data/teacher_seed/yuanbao_batches/yuanbao_batch_0004.jsonl"
   ],
   "failed_or_skipped": [],
   "batch_status": {
-    "yuanbao_batch_0003.jsonl": "generated_pending_review"
+    "yuanbao_batch_0003.jsonl": "generated_pending_review",
+    "yuanbao_batch_0004.jsonl": "generated_pending_review"
   }
 }
