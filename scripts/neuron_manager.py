@@ -182,6 +182,10 @@ def run(args: argparse.Namespace) -> dict:
         ids = getattr(args, "ids", None) or []
         neurons = selected_neurons(data, ids) if command not in ("list", "import") else data["neurons"] if command == "list" else []
         results: list[dict] = []
+        if command in ("save", "export", "enable", "disable", "evaluate"):
+            # Preflight all selected artifacts before any batch mutation/output.
+            for neuron in neurons:
+                resolve_artifact(root, neuron)
 
         if command == "import":
             unit_id = args.id.strip()
@@ -260,9 +264,35 @@ def run(args: argparse.Namespace) -> dict:
                 artifact = resolve_artifact(root, neuron)
                 score = evaluate_one(neuron, artifact, dataset)
                 threshold = args.good_mse_threshold
-                score["quality"] = "excellent" if score["mse"] <= threshold else "candidate"
+                reject_threshold = args.reject_above_mse
+                if reject_threshold <= threshold:
+                    raise ManagerError("--reject-above-mse 必须大于 --good-mse-threshold")
+                if score["mse"] <= threshold:
+                    quality = "excellent"
+                elif score["mse"] >= reject_threshold:
+                    quality = "rejected"
+                else:
+                    quality = "candidate"
+                score["quality"] = quality
+                # Rejected means quarantined/disabled, never physically deleted.
+                if quality == "rejected":
+                    neuron["enabled"] = False
+                    score["action"] = "disabled_and_archived_not_deleted"
+                snapshot_root = Path(args.snapshot_dir).resolve() / quality / neuron["id"]
+                snapshot_root.mkdir(parents=True, exist_ok=True)
+                snapshot = snapshot_root / f"revision-{int(neuron.get('revision', 1))}{artifact.suffix}"
+                shutil.copy2(artifact, snapshot)
+                score["snapshot"] = str(snapshot)
+                (snapshot_root / "manifest.json").write_text(json.dumps({
+                    "schema_version": "aimeng.neuron_snapshot.v1",
+                    "id": neuron["id"], "revision": int(neuron.get("revision", 1)),
+                    "quality": quality, "artifact": snapshot.name,
+                    "sha256": sha256_file(snapshot), "source_sha256": neuron["sha256"],
+                    "saved_at_unix": time.time(), "evaluation_mse": score["mse"]
+                }, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+                neuron["last_saved_snapshot"] = str(snapshot)
                 neuron["last_evaluation"] = score
-                neuron["quality"] = score["quality"]
+                neuron["quality"] = quality
                 neuron["updated_at_unix"] = time.time()
                 results.append(score)
             write_registry(registry_path, data)
@@ -305,13 +335,18 @@ def parser_for() -> argparse.ArgumentParser:
         if name == "evaluate":
             child.add_argument("--dataset", required=True, help="独立 JSONL，每行包含 input 数组和 target 数值")
             child.add_argument("--good-mse-threshold", type=float, default=0.05)
+            child.add_argument("--reject-above-mse", type=float, default=1.0,
+                               help="达到该 MSE 则停用并归档，但不会删除工件")
+            child.add_argument("--snapshot-dir", default="runs/neuron-snapshots")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser_for().parse_args(argv)
-    if getattr(args, "good_mse_threshold", 0.0) < 0 or getattr(args, "revision", 1) < 1:
-        print(json.dumps({"ok": False, "errors": [{"message": "threshold must be >= 0 and revision >= 1"}]}))
+    if (getattr(args, "good_mse_threshold", 0.0) < 0
+            or getattr(args, "reject_above_mse", 1.0) <= getattr(args, "good_mse_threshold", 0.0)
+            or getattr(args, "revision", 1) < 1):
+        print(json.dumps({"ok": False, "errors": [{"message": "thresholds must satisfy 0 <= good < reject and revision >= 1"}]}))
         return 2
     result = run(args)
     print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
