@@ -259,8 +259,6 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if args.gpu_layers < 0:
         parser.error("--gpu-layers must be >= 0")
-    if args.gpu_layers < 0:
-        parser.error("--gpu-layers must be >= 0")
     budget_set = [dict(b, threads=args.threads, gpu_layers=args.gpu_layers) for b in BUDGETS]
     with output_path.open("a" if args.append else "w", encoding="utf-8") as out:
         for index, task in enumerate(tasks, 1):
@@ -272,7 +270,8 @@ def main() -> int:
                 print(f"[{index}/{len(tasks)}] task={task['task_id']} budget={budget['budget_id']} "
                       f"status={record['result']['status']} quality={record['result']['quality_label']} "
                       f"latency_ms={record['performance']['total_latency_ms']}")
-    print(f"APPENDED {len(tasks) * len(budget_set)} records to {output_path}")
+    action = "APPENDED" if args.append else "WROTE"
+    print(f"{action} {len(tasks) * len(budget_set)} records to {output_path}")
     print("Note: requested context is recorded; actual context, TTFT, GPU memory, and token throughput are null unless measured by another backend instrument.")
     return 0
 
