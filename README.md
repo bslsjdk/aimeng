@@ -209,3 +209,18 @@ The same computational-unit contract covers model-learned candidates, human-auth
 - Validator: `scripts/validate_neuron_activity_trace.py`; tests: `tests/test_neuron_activity_trace.py`.
 
 These are contracts and validation scaffolding, not a working neural-unit runtime. Real tensor-level replacement and causal attribution still require a compatible model architecture, registry, execution backend, and controlled experiments.
+
+
+## 单神经元可训练实验（第一阶段）
+
+- [单神经元实验说明](docs/SINGLE_NEURON_LAB.md)：先验证一个单元的前向计算、局部参数更新、活动追踪、禁用消融和带验证门的独立替换。
+- `scripts/single_neuron_lab.py`：仅使用 Python 标准库的确定性线性神经元实验；默认把训练前后 held-out MSE 与 append-only JSONL 轨迹写入终端和 `runs/`。
+- `tests/test_single_neuron_lab.py`：检查学习是否改善保留集误差、单元禁用、轨迹写入，以及替换候选的接受/拒绝。
+- 这只是可运行的玩具学习器，不是语言模型，不实现双向预测编码，也不证明生物合理性。下一阶段再用多个单元实验显式前向/反馈通路，并与标准反向传播基线比较。
+
+运行：
+
+```bash
+python scripts/single_neuron_lab.py --epochs 60 --learning-rate 0.05 --trace runs/single-neuron-trace.jsonl
+python -m unittest discover -s tests -p 'test_single_neuron_lab.py'
+```
