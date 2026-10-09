@@ -33,6 +33,27 @@ class NeuronScoringLabTests(unittest.TestCase):
         lab.apply_score_policy([unit], [{"unit_id": "u", "score": 1.0}])
         self.assertTrue(unit.enabled)
 
+    def test_controller_never_sleeps_every_unit(self):
+        units = [
+            lab.Unit("a", 2.0, 1.0),
+            lab.Unit("b", 2.0, 1.0),
+        ]
+        records = [
+            {"unit_id": "a", "score": -1.0},
+            {"unit_id": "b", "score": -1.0},
+        ]
+        changes = lab.apply_score_policy(units, records)
+        self.assertTrue(any(unit.enabled for unit in units))
+        self.assertTrue(any(change.get("reason") == "minimum_active_unit_safety_floor" for change in changes))
+
+    def test_sleeping_unit_is_scored_as_candidate_admission(self):
+        units = [lab.Unit("active", 2.0, 1.0), lab.Unit("sleeping", 2.0, 1.0, enabled=False)]
+        validation = [(-1.0, -1.0), (0.0, 1.0), (1.0, 3.0)]
+        records = lab.score_units(units, validation, compute_cost=0.0)
+        sleeping = next(item for item in records if item["unit_id"] == "sleeping")
+        self.assertEqual(sleeping["comparison"], "admit_sleeping_unit")
+        self.assertAlmostEqual(sleeping["marginal_contribution"], 0.0)
+
     def test_empty_evaluation_is_rejected(self):
         with self.assertRaises(ValueError):
             lab.evaluate([lab.Unit("u", 1.0, 0.0)], [])
