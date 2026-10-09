@@ -90,3 +90,20 @@ python scripts/train_student_sft.py \
 ## 6. 完成标准
 
 框架的基础验收应包括：CI 通过、pending 样本绝不会进入训练、split 泄漏会被拒绝、assistant-only masking 有单测、dry-run 可重复、真实小规模 smoke test 能保存 checkpoint 与 manifest、独立 held-out 与回归评测可复现。只有最后几项也完成后，才算训练链路端到端跑通。
+
+
+## 7. 学生版本晋级与回滚门
+
+训练完成不代表可以替换当前学生。先在同一份冻结评测集上分别产生 baseline/candidate 指标 JSON，至少包含 `suite_hash`、`heldout_success_rate`、`regression_success_rate`、`model_version`。候选指标还必须包含目标设备整应用内存实测字段 `memory_measurement_scope: "android_app"`、`memory_measured: true` 和 `peak_memory_mib`。
+
+```bash
+python scripts/gate_student_release.py \
+  --baseline runs/baseline-metrics.json \
+  --candidate runs/candidate-metrics.json \
+  --decision runs/promotion-decision.json \
+  --promote-pointer runs/active-student.json
+```
+
+默认要求 held-out 成功率至少提升 1 个百分点、回归套件下降不超过 1 个百分点、整应用 Android 峰值低于 3800 MiB（为 4096 MiB 硬上限留余量），并且两次使用同一评测套件哈希。任何字段缺失、套件不一致、质量不足或内存没有实测都会阻止晋级。失败时旧 pointer 不会被覆盖；决定文件仍会记录拒绝原因。阈值可调整，但 Android 上限参数绝不能设为 4096 MiB 或更高。
+
+此门只负责晋级判断和更新一个 JSON 指针，不会自动部署模型、执行手机测试或生成可信指标。内存数据必须来自目标手机整应用测量，而不是模型文件大小或训练机 RAM。
