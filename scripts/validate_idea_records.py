@@ -39,7 +39,7 @@ def validate_row(row: object, line_no: int) -> list[str]:
         if key in row and (not isinstance(row[key], list) or any(not isinstance(x, str) for x in row[key])):
             errors.append(prefix + f"{key} must be an array of strings")
     status = row.get("epistemic_status")
-    if status not in STATUSES:
+    if not isinstance(status, str) or status not in STATUSES:
         errors.append(prefix + "invalid epistemic_status")
     plan = row.get("verification_plan")
     if not isinstance(plan, dict) or not _nonempty(plan.get("method")):
@@ -56,7 +56,7 @@ def validate_row(row: object, line_no: int) -> list[str]:
         if not isinstance(result, dict):
             errors.append(prefix + "verification_result must be an object or null")
         else:
-            if result.get("status") not in RESULT_STATUSES:
+            if not isinstance(result.get("status"), str) or result.get("status") not in RESULT_STATUSES:
                 errors.append(prefix + "invalid verification_result.status")
             for key in ("evidence_refs",):
                 if key in result and (not isinstance(result[key], list) or any(not isinstance(x, str) for x in result[key])):
