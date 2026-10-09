@@ -28,6 +28,8 @@ def decide_next_action(
     quality = observation.get("quality_label", "unknown")
     status = observation.get("status", "completed")
     pss = observation.get("whole_app_pss_mib")
+    pss_source = observation.get("memory_measurement_source")
+    trusted_pss = pss_source == "android_whole_app"
 
     if current not in BUDGETS:
         raise ValueError(f"budget must be one of {BUDGETS}")
@@ -53,10 +55,11 @@ def decide_next_action(
         "quality_label": quality,
         "status": status,
         "whole_app_pss_mib": pss,
+        "memory_measurement_source": pss_source,
         "persistent_update": False,
     }
 
-    if pss is not None and pss >= hard_limit_mib:
+    if trusted_pss and pss is not None and pss >= hard_limit_mib:
         return {**base, "action": "stop_and_flag_memory_violation",
                 "next_budget": None, "reason": "whole_app_pss_at_or_above_hard_limit"}
     if status in {"oom", "cancelled", "failed", "timeout"}:
@@ -68,9 +71,10 @@ def decide_next_action(
     if quality == "unknown":
         return {**base, "action": "stop_for_reliable_feedback",
                 "next_budget": None, "reason": "unknown_is_not_a_training_label"}
-    if pss is None:
+    if pss is None or not trusted_pss:
         return {**base, "action": "stop_for_memory_measurement",
-                "next_budget": None, "reason": "cannot_establish_runtime_memory_safety"}
+                "next_budget": None,
+                "reason": "missing_or_untrusted_whole_app_memory_measurement"}
 
     soft_limit = hard_limit_mib - safety_margin_mib
     if pss >= soft_limit:
