@@ -32,15 +32,23 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def read_pss_mib(pid: int) -> float | None:
-    # Linux smaps_rollup is available on many Linux runtimes; missing permission/data is null.
+def read_process_memory_mib(pid: int) -> tuple[float | None, float | None]:
+    # RSS comes from /proc/<pid>/status; PSS from smaps_rollup when available.
+    rss_mib = None
+    pss_mib = None
+    try:
+        status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8", errors="replace")
+        match = re.search(r"^VmRSS:\\s+(\\d+)\\s+kB$", status, re.MULTILINE)
+        rss_mib = round(int(match.group(1)) / 1024, 2) if match else None
+    except (OSError, ValueError):
+        pass
     try:
         text = Path(f"/proc/{pid}/smaps_rollup").read_text(encoding="utf-8", errors="replace")
-        match = re.search(r"^Pss:\s+(\d+)\s+kB$", text, re.MULTILINE)
-        return round(int(match.group(1)) / 1024, 2) if match else None
+        match = re.search(r"^Pss:\\s+(\\d+)\\s+kB$", text, re.MULTILINE)
+        pss_mib = round(int(match.group(1)) / 1024, 2) if match else None
     except (OSError, ValueError):
-        return None
-
+        pass
+    return rss_mib, pss_mib
 
 def verify_output(task: dict[str, Any], output: str) -> tuple[str, float | None, str]:
     verifier = task.get("verifier", "unknown")
@@ -149,6 +157,8 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
             "budget_id": budget["budget_id"],
             "n_ctx_requested": budget["n_ctx"],
             "n_ctx_actual": None,
+            "n_gpu_layers_requested": budget.get("gpu_layers", 0),
+            "n_gpu_layers_actual": None,
             "n_batch_requested": None,
             "n_batch_actual": None,
             "max_tokens": budget["max_tokens"],
@@ -182,7 +192,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
             "kv_cache_estimated_mib": None,
             "gpu_peak_allocated_mib": None,
             "gpu_peak_reserved_mib": None,
-            "measurement_method": "sampled_linux_proc_smaps_rollup" if pss_peak is not None else "pss_unavailable",
+            "measurement_method": "sampled_linux_proc_status_and_smaps_rollup" if (rss_peak is not None or pss_peak is not None) else "process_memory_unavailable",
         },
         "routing": {
             "controller_version": "fixed-budget-collector-v1",
@@ -208,6 +218,8 @@ def main() -> int:
     parser.add_argument("--llama-cli", default=os.environ.get("LLAMA_CLI", "llama-cli"))
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--gpu-layers", type=int, default=0,
+                        help="Request this many model layers offloaded; use only with a confirmed GPU-enabled build")
     parser.add_argument("--device-class", default="colab_gpu")
     parser.add_argument("--accelerator", default="unknown",
                         help="Declared build/runtime accelerator, e.g. CUDA-T4 or CPU; do not guess")
@@ -241,7 +253,9 @@ def main() -> int:
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    budget_set = [dict(b, threads=args.threads) for b in BUDGETS]
+    if args.gpu_layers < 0:
+        parser.error("--gpu-layers must be >= 0")
+    budget_set = [dict(b, threads=args.threads, gpu_layers=args.gpu_layers) for b in BUDGETS]
     with output_path.open("a", encoding="utf-8") as out:
         for index, task in enumerate(tasks, 1):
             for budget in budget_set:
