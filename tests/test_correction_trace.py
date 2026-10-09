@@ -119,5 +119,32 @@ class CorrectionTraceTests(unittest.TestCase):
         self.assertTrue(any("confidence_label" in e for e in module.validate_trace(row)))
 
 
+    def test_malformed_enum_values_return_validation_errors_not_crashes(self):
+        row = trace()
+        row["status"] = {"unexpected": "object"}
+        errors = module.validate_trace(row)
+        self.assertTrue(any("invalid status" in error for error in errors))
+
+        row = trace()
+        row["initial_signal"]["outcome"] = ["fail"]
+        errors = module.validate_trace(row)
+        self.assertTrue(any("initial_signal.outcome is invalid" in error for error in errors))
+
+    def test_failed_correction_must_keep_same_declared_scope(self):
+        row = trace("failed_correction")
+        row["recheck_signal"]["outcome"] = "fail"
+        row["recheck_signal"]["scope"] = {"suite": "different-suite"}
+        errors = module.validate_trace(row)
+        self.assertTrue(any("recheck scope must match" in error for error in errors))
+
+    def test_inconclusive_recheck_without_correction_artifact_is_rejected(self):
+        row = trace("inconclusive")
+        row["correction_artifact"] = None
+        row["recheck_signal"]["outcome"] = "unavailable"
+        row["recheck_signal"]["evidence_refs"] = []
+        errors = module.validate_trace(row)
+        self.assertTrue(any("requires a correction_artifact" in error for error in errors))
+
+
 if __name__ == "__main__":
     unittest.main()
