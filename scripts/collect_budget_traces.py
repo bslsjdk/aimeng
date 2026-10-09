@@ -23,9 +23,11 @@ from typing import Any
 
 
 BUDGETS = (
-    {"budget_id": "small-v1", "n_ctx": 1024, "max_tokens": 128, "threads": 4},
-    {"budget_id": "medium-v1", "n_ctx": 2048, "max_tokens": 256, "threads": 4},
-    {"budget_id": "full-v1", "n_ctx": 4096, "max_tokens": 512, "threads": 4},
+    # n_batch affects prompt-processing throughput and temporary memory.
+    # These are experimental sweep values, not calibrated claims for every backend.
+    {"budget_id": "small-v1", "n_ctx": 1024, "max_tokens": 128, "threads": 4, "n_batch": 64},
+    {"budget_id": "medium-v1", "n_ctx": 2048, "max_tokens": 256, "threads": 4, "n_batch": 128},
+    {"budget_id": "full-v1", "n_ctx": 4096, "max_tokens": 512, "threads": 4, "n_batch": 256},
 )
 
 
@@ -79,6 +81,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
     cmd = [
         cli, "-m", model_path, "-p", str(task["prompt"]),
         "-c", str(budget["n_ctx"]), "-n", str(budget["max_tokens"]),
+        "-b", str(budget["n_batch"]),
         "-t", str(budget["threads"]), "--no-display-prompt", "--no-warmup",
     ]
     if budget.get("gpu_layers", 0) > 0:
@@ -170,7 +173,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
             "n_ctx_actual": None,
             "n_gpu_layers_requested": budget.get("gpu_layers", 0),
             "n_gpu_layers_actual": None,
-            "n_batch_requested": None,
+            "n_batch_requested": budget["n_batch"],
             "n_batch_actual": None,
             "max_tokens": budget["max_tokens"],
             "threads": budget["threads"],
@@ -179,7 +182,7 @@ def run_one(cli: str, model_path: str, task: dict[str, Any], budget: dict[str, A
             "kv_cache_type_v": None,
             "decode_profile": "default",
             "execution_mode": "normal",
-            "unsupported_features": ["actual_context_batch_and_kv_cache_not_exposed_by_this_harness"],
+            "unsupported_features": ["actual_context_and_kv_cache_not_exposed_by_this_harness", "backend_acceptance_of_requested_parameters_not_verified"],
         },
         "result": {
             "status": status,
