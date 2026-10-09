@@ -467,3 +467,34 @@ The first software-contract layer has now been added on the research branch:
 - `.github/workflows/idea-cycle-tests.yml`: CI job for schema JSON parsing and those unit tests.
 
 These are the initial contracts and persistence layer, not the complete thinking runtime. They have not yet been confirmed by a successful CI run in this document. Next, connect a real core-model adapter to idea generation/critique, add independent verifier adapters, create a fixed evaluation suite, and only later implement isolated adapter training and module loading. No dynamic neuron growth, model-weight update, real backend integration, or Android memory result is claimed at this stage.
+
+
+## 17. External feedback and correction loop
+
+A model saying “I was wrong” is not itself evidence of an error. A useful learning signal must identify the exact artifact tested, the verifier and version, the outcome, the scope, and supporting evidence. The verifier is external to the candidate answer, but it can still be buggy or incomplete, so its limitations must be retained.
+
+### Operational loop
+
+1. The unified core model produces a versioned answer, plan, patch, or hypothesis.
+2. Where meaningful, record the expected outcome before running a check; do not invent an expectation after seeing the result.
+3. Run an appropriate check: compiler/tests for code, formal or numeric checks for math where available, source-backed cross-checks for facts, human feedback for ambiguous preferences, or measured task outcomes.
+4. Emit a structured record using schemas/learning_signal.schema.json. The record binds the outcome to the exact artifact hash.
+5. For a failure, ask the core model to identify the smallest likely faulty step, list alternative causes, propose a correction, and state what evidence would disconfirm that diagnosis. This diagnosis is a hypothesis, not ground truth.
+6. Create a new artifact version and rerun the verifier. A changed answer is not a successful correction until the check passes within the declared scope.
+7. Store attempt, signal, diagnosis, patch, recheck result, and limitations as an error-to-correction trace. Promote it to reusable experience only after successful recheck and regression/leakage review.
+8. Begin with context/retrieval reuse. Only later test isolated adapters or subgraphs. A single failure must never directly update stable core weights.
+
+### Outcomes must remain distinct
+
+- fail: evidence supports failure within the recorded scope; revise and retest.
+- inconclusive: the check cannot decide; gather evidence rather than labeling the candidate wrong.
+- unavailable: the verifier did not run; this is an infrastructure gap, not a model error.
+- pass: the artifact passed this test and scope, not every possible case.
+
+For high-impact promotion, use a second independent check or human review where practical. Do not substitute the model's confidence or self-critique for external evidence.
+
+### First implementation added
+
+The branch now contains schemas/learning_signal.schema.json, scripts/build_correction_feedback.py, tests/test_correction_feedback.py, and a CI step for these tests. The feedback builder maps a failure to revision plus re-verification; maps inconclusive/unavailable to gathering more evidence; and treats pass as scoped success. It explicitly authorizes neither weight updates nor memory promotion.
+
+This is not yet an end-to-end learning system: the core-model adapter does not yet call this builder, real verifier integrations are not claimed, no improvement in repair rate has been measured, and no weights are updated. The next unit is an immutable correction-trace record, verifier adapters, and a fixed benchmark for first-pass success, repair rate, repeated-error rate, held-out transfer, regressions, latency, and peak runtime RAM.
