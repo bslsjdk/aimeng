@@ -8,6 +8,8 @@ SPEC = importlib.util.spec_from_file_location(
     "single_neuron_lab", ROOT / "scripts" / "single_neuron_lab.py"
 )
 lab_module = importlib.util.module_from_spec(SPEC)
+import sys
+sys.modules[SPEC.name] = lab_module
 SPEC.loader.exec_module(lab_module)
 
 
