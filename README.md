@@ -77,3 +77,14 @@ python scripts/collect_budget_traces.py \\
 ## 在线学习机制
 
 新增 [在线学习闭环设计](docs/ONLINE_LEARNING_LOOP.md)：区分任务内临时适应与任务后持久巩固，使用独立验证器产生误差信号，并将质量和 4096 MiB Android 运行时限制设为不可被奖励抵消的硬门槛。该文档是设计规范。`scripts/online_adaptation.py` 已实现首个可单测的任务内决策器，但尚未接入真实推理执行器，也不代表在线学习已在 Colab 或手机端完成端到端验证。
+
+
+## 有界动态工作集与 9B 知识导入（新实验分支）
+
+- 设计约束：[神经科学启发的有界运行时](docs/NEUROINSPIRED_BOUNDED_RUNTIME.md) 把任务相关路由、固定工作集、经验巩固和真实内存验证分开定义。
+- 资源池原型：`scripts/bounded_workspace.py` 提供固定槽位、字节预算、LRU 替换与 pinned 保护。它只管理元数据，**尚未接入 GGUF 后端，不代表真实权重卸载或 RAM 已降低**。
+- 9B 知识路径：[教师知识导入设计](docs/TEACHER_KNOWLEDGE_PIPELINE.md) 区分可检索事实库、任务轨迹和后续参数蒸馏。
+- 知识记录检查/去重：`python scripts/prepare_knowledge_corpus.py --input data/teacher-knowledge.jsonl --output data/knowledge-clean.jsonl`。该脚本只做结构校验和确定性去重，不验证事实本身；使用 `--verified-only` 可只导出带外部来源/验证器信息的记录。
+- 新增测试：`tests/test_bounded_workspace.py` 覆盖工作集准入、LRU、锁定和知识数据去重。需要运行完整测试套件后再判断是否通过。
+
+当前这一步建立的是可测试的框架与知识数据入口，不是已完成的 Android 动态权重分页实现。4096 MiB 仍须以整应用设备实测为准。
