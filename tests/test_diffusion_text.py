@@ -126,5 +126,15 @@ class DiffusionTextTests(unittest.TestCase):
             state = torch.load(output / "training_state.pt", map_location="cpu", weights_only=False)
             self.assertEqual(state["resume_signature"]["validation_sha256"], expected)
             self.assertNotIn("龘", state["stoi"])
+            from scripts.evaluate_language_checkpoint import evaluate_checkpoint
+            test_file = root / "test.txt"
+            test_file.write_text("独立测试文本用于评估扩散步骤。\\n" * 10, encoding="utf-8")
+            test_report = evaluate_checkpoint(
+                str(output / "diffusion_checkpoint.pt"), str(test_file),
+                limit=3, batch_size=1, device_name="cpu"
+            )
+            self.assertEqual(test_report["format"], "aimeng-heldout-test-report-v1")
+            self.assertEqual(test_report["evaluated_next_character_positions"], 3)
+            self.assertTrue(torch.isfinite(torch.tensor(test_report["full_diffusion_loss"])))
 
 if __name__ == "__main__": unittest.main()
