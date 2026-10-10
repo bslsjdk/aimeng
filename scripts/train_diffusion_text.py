@@ -255,6 +255,7 @@ def train(args):
             print(json.dumps({"event":"already_at_or_beyond_target","completed_steps":completed_steps,"target_steps":args.steps}), flush=True)
     if initial_loss is None:
         initial_loss = evaluate(model, val_ids, args.context, device=device)
+    session_start_step = completed_steps
     started = time.time(); model.train()
     memory_stopped = False; peak_observed_mib = 0.0; memory_metric = "unknown"
     signature = {
@@ -324,7 +325,7 @@ def train(args):
               "optimizer_steps_completed":completed_steps,
               "training_target_characters_seen":completed_steps * args.batch_size,
               "training_context_characters_processed":completed_steps * args.batch_size * args.context,
-              "steps_per_second_this_session":round(completed_steps / max(1e-9, time.time()-started), 3),
+              "steps_per_second_this_session":round((completed_steps - session_start_step) / max(1e-9, time.time()-started), 3),
               "source":checkpoint["source"], "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode, "initial_validation_loss":initial_loss,
               "final_validation_loss":final_loss, "train_loss_last":last_loss,
               "checkpoint":"diffusion_checkpoint.pt", "resumable_state":"training_state.pt",
