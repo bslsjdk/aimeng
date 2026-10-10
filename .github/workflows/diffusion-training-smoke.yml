@@ -1,0 +1,32 @@
+name: Sparse diffusion training smoke test
+
+on:
+  push:
+    branches: [feat/sparse-diffusion-text-trainer]
+  pull_request:
+    branches: [feat/neuro-inspired-bounded-runtime]
+  workflow_dispatch:
+
+jobs:
+  train-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install CPU training runtime
+        run: python -m pip install --upgrade pip torch
+      - name: Unit tests
+        run: python -m unittest tests.test_diffusion_text -v
+      - name: Train a reproducible smoke model
+        run: python scripts/train_diffusion_text.py --steps 1000 --neurons 128 --width 32 --active-k 8 --fanout 8 --max-steps 6 --output runs/diffusion-smoke --log-every 100
+      - name: Upload checkpoint and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aimeng-diffusion-smoke-checkpoint
+          path: runs/diffusion-smoke/
+          if-no-files-found: error
+          retention-days: 14
