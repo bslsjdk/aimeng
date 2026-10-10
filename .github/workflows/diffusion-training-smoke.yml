@@ -19,10 +19,10 @@ on:
           - D
           - E
       steps:
-        description: "Training steps (start with 1000 for the first smoke run)"
+        description: "Training steps for the first speech-quality attempt (50,000 default)"
         type: string
         required: true
-        default: "1000"
+        default: "50000"
       corpus_path:
         description: "Optional UTF-8 corpus file already committed to this branch. Blank automatically prepares up to 50,000 Chinese instruction/answer examples from BelleGroup/train_0.5M_CN."
         type: string
@@ -53,7 +53,7 @@ jobs:
         shell: bash
         env:
           LEVEL: ${{ inputs.level || 'A' }}
-          REQUESTED_STEPS: ${{ inputs.steps || '1000' }}
+          REQUESTED_STEPS: ${{ inputs.steps || '50000' }}
           CORPUS_PATH: ${{ inputs.corpus_path || '' }}
           CONFIRM_LARGE: ${{ inputs.confirm_large_experiment || 'false' }}
         run: |
