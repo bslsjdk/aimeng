@@ -92,7 +92,7 @@ class DiffusionTextTests(unittest.TestCase):
 
     def test_record_split_rejects_too_small_input(self):
         with self.assertRaises(ValueError):
-            split_records("\\n\\n".join(f"r{i}" for i in range(5)))
+            split_records("\n\n\n".join(f"r{i}" for i in range(5)))
 
     def test_vocab_can_be_fitted_without_validation_only_characters(self):
         stoi, itos = make_vocab("中文训练语料", max_vocab=32)
