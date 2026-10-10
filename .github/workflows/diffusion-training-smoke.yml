@@ -87,11 +87,13 @@ jobs:
           echo "corpus_path=$CORPUS_PATH" >> "$GITHUB_OUTPUT"
           echo "Selected level $LEVEL: neurons=$NEURONS active_k=$ACTIVE_K steps=$REQUESTED_STEPS"
       - name: Validate optional corpus
+        if: github.event_name == 'workflow_dispatch'
         if: ${{ steps.config.outputs.corpus_path != '' }}
         env:
           CORPUS_PATH: ${{ steps.config.outputs.corpus_path }}
         run: test -s "$CORPUS_PATH"
       - name: Train selected experiment
+        if: github.event_name == 'workflow_dispatch'
         env:
           LEVEL: ${{ steps.config.outputs.level }}
           NEURONS: ${{ steps.config.outputs.neurons }}
@@ -111,6 +113,7 @@ jobs:
           fi
           python scripts/train_diffusion_text.py "${ARGS[@]}"
       - name: Generate sample for manual speech-quality review
+        if: github.event_name == 'workflow_dispatch'
         env:
           LEVEL: ${{ steps.config.outputs.level }}
         run: |
@@ -130,6 +133,7 @@ jobs:
           print(sample["generated_text"])
           PY
       - name: Export portable JSON and new binary Android import file
+        if: github.event_name == 'workflow_dispatch'
         env:
           LEVEL: ${{ steps.config.outputs.level }}
         run: |
@@ -157,6 +161,7 @@ jobs:
           print(f"New Android import validated: {len(packed)} bytes, AIMG v{version}")
           PY
       - name: Upload checkpoint, portable bundle, speech sample and report
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: aimeng-diffusion-level-${{ steps.config.outputs.level }}-${{ github.run_number }}
