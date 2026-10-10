@@ -1,4 +1,7 @@
 import unittest
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
 import torch
 from scripts.train_diffusion_text import DiffusionTextModel, make_vocab, encode, SMOKE_TEXT
 
@@ -45,5 +48,33 @@ class DiffusionTextTests(unittest.TestCase):
         self.assertIsNotNone(model.decoder.weight.grad)
         torch.optim.AdamW(model.parameters(), lr=0.01).step()
         self.assertFalse(torch.equal(before, model.decoder.weight.detach()))
+
+    def test_periodic_checkpoint_can_resume_training(self):
+        from scripts.train_diffusion_text import train
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            corpus = root / "corpus.txt"
+            corpus.write_text(SMOKE_TEXT * 10, encoding="utf-8")
+            output = root / "run"
+
+            def args(steps, resume):
+                return SimpleNamespace(
+                    text=str(corpus), context=8, vocab_size=64, seed=7,
+                    neurons=16, width=4, active_k=2, fanout=2, max_steps=1,
+                    lr=0.002, step_penalty=0.001, batch_size=1, steps=steps,
+                    log_every=100, checkpoint_every=1, memory_stop_mib=100000.0,
+                    output=str(output), resume=resume,
+                )
+
+            first = train(args(2, False))
+            self.assertEqual(first["steps_completed"], 2)
+            self.assertTrue((output / "training_state.pt").is_file())
+            self.assertTrue((output / "diffusion_checkpoint.pt").is_file())
+
+            resumed = train(args(3, True))
+            self.assertEqual(resumed["steps_completed"], 3)
+            state = torch.load(output / "training_state.pt", map_location="cpu", weights_only=False)
+            self.assertEqual(state["completed_steps"], 3)
+            self.assertEqual(state["format"], "aimeng-resumable-training-state-v1")
 
 if __name__ == "__main__": unittest.main()
