@@ -1,0 +1,20 @@
+{
+  "format": "aimeng-colab-d0-config-v1",
+  "neurons": 8192,
+  "width": 32,
+  "active_k": 128,
+  "fanout": 8,
+  "max_diffusion_steps": 4,
+  "context": 64,
+  "batch_size": 1,
+  "steps": 500,
+  "checkpoint_every": 25,
+  "seed": 7,
+  "vocab_size": 2048,
+  "dataset_fallback": "Salesforce/wikitext:wikitext-2-raw-v1:train",
+  "dataset_role": "English pipeline baseline only; not evidence of broad language competence",
+  "persistent_drive_root": "MyDrive/aimeng_runs",
+  "preflight_output": "D0_preflight",
+  "training_output": "D0_8192n_w32_k128",
+  "android_runtime_ram_limit_mib": 4096
+}
