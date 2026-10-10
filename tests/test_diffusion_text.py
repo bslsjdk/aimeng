@@ -99,4 +99,32 @@ class DiffusionTextTests(unittest.TestCase):
         self.assertNotIn("罕", stoi)
         self.assertEqual(encode("中文罕见字", stoi)[2], 0)
 
+
+    def test_independent_validation_file_is_hashed_and_used(self):
+        import hashlib
+        from scripts.train_diffusion_text import train
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            train_file = root / "train.txt"
+            validation_file = root / "validation.txt"
+            train_file.write_text(SMOKE_TEXT * 5, encoding="utf-8")
+            validation_text = ("验证专用字符龘龘龘。\n" * 30)
+            validation_file.write_text(validation_text, encoding="utf-8")
+            output = root / "run"
+            args = SimpleNamespace(
+                text=str(train_file), validation_text=str(validation_file),
+                context=8, vocab_size=64, seed=7, neurons=16, width=4,
+                active_k=2, fanout=2, max_steps=1, lr=0.002,
+                step_penalty=0.001, batch_size=1, steps=2, log_every=100,
+                checkpoint_every=1, memory_stop_mib=100000.0,
+                output=str(output), resume=False,
+            )
+            report = train(args)
+            expected = hashlib.sha256(validation_text.encode("utf-8")).hexdigest()
+            self.assertEqual(report["split_mode"], "independent_file")
+            self.assertEqual(report["validation_sha256"], expected)
+            state = torch.load(output / "training_state.pt", map_location="cpu", weights_only=False)
+            self.assertEqual(state["resume_signature"]["validation_sha256"], expected)
+            self.assertNotIn("龘", state["stoi"])
+
 if __name__ == "__main__": unittest.main()
