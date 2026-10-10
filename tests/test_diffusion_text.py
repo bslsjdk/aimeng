@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import torch
 from scripts.train_diffusion_text import DiffusionTextModel, make_vocab, encode, SMOKE_TEXT
+from scripts.prepare_language_splits import split_records
 
 class DiffusionTextTests(unittest.TestCase):
     def test_vocab_roundtrip_and_model_shapes(self):
@@ -76,5 +77,26 @@ class DiffusionTextTests(unittest.TestCase):
             state = torch.load(output / "training_state.pt", map_location="cpu", weights_only=False)
             self.assertEqual(state["completed_steps"], 3)
             self.assertEqual(state["format"], "aimeng-resumable-training-state-v1")
+
+
+    def test_record_splits_are_disjoint_and_deduplicated(self):
+        records = [f"问题：样本{i}\\n回答：答案{i}" for i in range(40)]
+        source = "\\n\\n".join(records + [records[3], records[7]]) + "\\n"
+        splits, duplicates = split_records(source, seed=11)
+        self.assertEqual(duplicates, 2)
+        self.assertEqual(sum(len(rows) for rows in splits.values()), 40)
+        sets = {name: set(rows) for name, rows in splits.items()}
+        self.assertFalse(sets["train"] & sets["validation"])
+        self.assertFalse(sets["train"] & sets["test"])
+        self.assertFalse(sets["validation"] & sets["test"])
+
+    def test_record_split_rejects_too_small_input(self):
+        with self.assertRaises(ValueError):
+            split_records("\\n\\n".join(f"r{i}" for i in range(5)))
+
+    def test_vocab_can_be_fitted_without_validation_only_characters(self):
+        stoi, itos = make_vocab("中文训练语料", max_vocab=32)
+        self.assertNotIn("罕", stoi)
+        self.assertEqual(encode("中文罕见字", stoi)[2], 0)
 
 if __name__ == "__main__": unittest.main()
