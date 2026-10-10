@@ -56,7 +56,8 @@ def record_to_text(row: dict[str, Any]) -> str | None:
 def normalize(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = "\n".join(line.strip() for line in text.split("\n"))
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    # Collapse paragraph breaks inside an example so blank lines remain unambiguous record delimiters.
+    text = re.sub(r"\n{2,}", "\n", text)
     return text.strip()
 
 
