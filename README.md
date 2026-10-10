@@ -132,3 +132,14 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 ## 资源感知奖励实验（设计提案）
 
 [资源感知奖励机制](docs/RESOURCE_AWARE_REWARD.md) 记录了“难题解出后给予额外奖励、资源占用扣分”的离线实验方案。难度奖励必须由固定基准模型的重复失败率和独立验证支持；任何硬内存/计算限制都不能被奖励抵消。该文档目前只是研究提案，尚未接入训练器，也没有声称已证明有效。
+
+
+## Google Colab D0 character-language baseline
+
+- [Open the Google Colab notebook](https://colab.research.google.com/github/bslsjdk/aimeng/blob/feat/google-colab-d-training/notebooks/AIMENG_D0_Google_Colab.ipynb)
+- [Colab persistence and recovery guide](docs/COLAB_TRAINING.md)
+- [Language curriculum, architecture limits, and evidence gates](docs/LANGUAGE_CURRICULUM.md)
+- [Reproducible D0 configuration](configs/colab_d0.json)
+- [Dataset provenance and license notes](data/DATASET_PROVENANCE.md)
+
+The trainer now writes atomic resumable checkpoints (model + optimizer + completed step count) periodically. The notebook keeps corpus, checkpoints, report, and log in Google Drive so a Colab runtime reset does not erase the only copy. This is infrastructure preparation only; no Colab training run has been executed by this repository change. The current 50,000-record Chinese instruction fallback is only a starter/pipeline baseline, not sufficient curriculum or evidence of general language competence. The architecture limits and data gates are documented in `docs/LANGUAGE_CURRICULUM.md`.

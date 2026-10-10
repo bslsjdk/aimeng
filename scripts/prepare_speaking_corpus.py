@@ -97,7 +97,8 @@ def prepare(dataset_name: str, split: str, output: Path, max_records: int,
     if not records:
         raise RuntimeError(f"No usable records from {dataset_name}; scanned={scanned}")
     random.Random(seed).shuffle(records)
-    corpus = "\n\n".join(records) + "\n"
+    # Three newline characters form a record boundary; internal paragraph breaks use at most two.
+    corpus = "\n\n\n".join(records) + "\n"
     output.parent.mkdir(parents=True, exist_ok=True)
     temp = output.with_suffix(output.suffix + ".tmp")
     temp.write_text(corpus, encoding="utf-8")

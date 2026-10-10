@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Train a small sparse-diffusion character model. Smoke data is NOT language evidence."""
 from __future__ import annotations
-import argparse, json, math, random, time, resource
+import argparse, hashlib, json, math, random, time, resource
 from pathlib import Path
 import torch
 from torch import nn
@@ -144,8 +144,9 @@ def batches(ids: list[int], context: int, batch_size: int, steps: int, seed: int
         y = torch.tensor([ids[s+context] for s in starts], dtype=torch.long)
         yield x, y
 
-def evaluate(model, ids, context, limit=512):
+def evaluate(model, ids, context, limit=512, device=None):
     model.eval()
+    device = device or next(model.parameters()).device
     if len(ids) <= context + 1:
         return float("nan")
     starts = list(range(min(len(ids)-context-1, limit)))
@@ -153,8 +154,8 @@ def evaluate(model, ids, context, limit=512):
     with torch.no_grad():
         for offset in range(0, len(starts), 64):
             ss = starts[offset:offset+64]
-            x = torch.tensor([ids[s:s+context] for s in ss], dtype=torch.long)
-            y = torch.tensor([ids[s+context] for s in ss], dtype=torch.long)
+            x = torch.tensor([ids[s:s+context] for s in ss], dtype=torch.long, device=device)
+            y = torch.tensor([ids[s+context] for s in ss], dtype=torch.long, device=device)
             total += F.cross_entropy(model(x, early_stop=False)["logits"], y, reduction="sum").item()
     return total / len(starts)
 
@@ -183,59 +184,157 @@ def process_memory_mib():
         return rss, "RSS_FALLBACK", peak_rss
     return peak_rss, "PEAK_RSS_FALLBACK", peak_rss
 
+def _atomic_torch_save(payload, path: Path):
+    """Write checkpoints atomically so an interrupted save won't replace the last good copy."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(payload, temporary)
+    temporary.replace(path)
+
 def train(args):
     random.seed(args.seed); torch.manual_seed(args.seed)
     source = Path(args.text).read_text(encoding="utf-8") if args.text else SMOKE_TEXT
     if len(source) < args.context + 20:
         raise ValueError("corpus is too short for the chosen context length")
-    cut = max(args.context + 2, int(len(source) * 0.9))
-    train_text, val_text = source[:cut], source[cut:]
-    stoi, itos = make_vocab(source, args.vocab_size)
+    corpus_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    validation_path = getattr(args, "validation_text", None)
+    if validation_path:
+        train_text = source
+        val_text = Path(validation_path).read_text(encoding="utf-8")
+        if len(val_text) < args.context + 2:
+            raise ValueError("validation corpus is too short for the chosen context length")
+        split_mode = "independent_file"
+    else:
+        # Legacy fallback only. Prefer record-level train/validation/test files.
+        cut = max(args.context + 2, int(len(source) * 0.9))
+        train_text, val_text = source[:cut], source[cut:]
+        split_mode = "legacy_contiguous_90_10"
+    validation_sha256 = hashlib.sha256(val_text.encode("utf-8")).hexdigest()
+    # Vocabulary is fitted on training text only: validation-only characters become <unk>.
+    stoi, itos = make_vocab(train_text, args.vocab_size)
     train_ids, val_ids = encode(train_text, stoi), encode(val_text, stoi)
-    model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps).to(device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    print(json.dumps({"event":"device_selected", "device":str(device), "gpu":torch.cuda.get_device_name(0) if device.type == "cuda" else None}), flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    initial_loss = evaluate(model, val_ids, args.context)
-    started = time.time(); model.train(); last_loss = float("nan"); completed_steps = 0
-    memory_stopped = False; peak_observed_mib = 0.0; memory_metric = "unknown"
-    for step, (x, y) in enumerate(batches(train_ids, args.context, args.batch_size, args.steps, args.seed + 1), 1):
-        if step % 25 == 0 or step == 1:
-            current_mib, memory_metric, _ = process_memory_mib()
-            peak_observed_mib = max(peak_observed_mib, current_mib)
-            if current_mib >= args.memory_stop_mib:
-                memory_stopped = True
-                print(json.dumps({"event":"safe_stop_memory_limit", "step":step, "measured_mib":round(current_mib,1), "metric":memory_metric, "limit_mib":args.memory_stop_mib}), flush=True)
-                break
-        completed_steps = step
-        optimizer.zero_grad(set_to_none=True)
-        out = model(x, early_stop=False)
-        task_loss = F.cross_entropy(out["logits"], y)
-        loss = task_loss + args.step_penalty * out["expected_steps"].mean()
-        if not torch.isfinite(loss):
-            raise RuntimeError(f"non-finite loss at step {step}")
-        loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step()
-        last_loss = float(task_loss.detach())
-        if step == 1 or step % args.log_every == 0 or step == args.steps:
-            print(json.dumps({"step":step, "steps":args.steps, "train_loss":round(last_loss,5),
-                              "mean_expected_steps":round(float(out["expected_steps"].mean().detach()),3)}, ensure_ascii=False), flush=True)
-    final_loss = evaluate(model, val_ids, args.context)
     out_dir = Path(args.output); out_dir.mkdir(parents=True, exist_ok=True)
+    state_path = out_dir / "training_state.pt"
+    initial_loss = None
+    last_loss = float("nan")
+    completed_steps = 0
+    if args.resume:
+        if not state_path.is_file():
+            raise FileNotFoundError(f"--resume requested but no resumable state exists: {state_path}")
+        saved = torch.load(state_path, map_location=device, weights_only=False)
+        if saved.get("format") != "aimeng-resumable-training-state-v1":
+            raise ValueError("Unsupported checkpoint format; refusing unsafe resume")
+        saved_config = saved.get("resume_signature", {})
+        current_config = {
+            "corpus_sha256": corpus_sha256, "validation_sha256": validation_sha256, "split_mode": split_mode, "neurons": args.neurons, "width": args.width,
+            "active_k": args.active_k, "fanout": args.fanout, "max_steps": args.max_steps,
+            "context": args.context, "batch_size": args.batch_size, "vocab_size": args.vocab_size,
+            "seed": args.seed, "lr": args.lr, "step_penalty": args.step_penalty,
+        }
+        if saved_config != current_config:
+            raise ValueError("Resume settings or corpus differ from the saved run. Keep the same corpus/config or start a new output directory.")
+        model.load_state_dict(saved["model_state"])
+        optimizer.load_state_dict(saved["optimizer_state"])
+        completed_steps = int(saved["completed_steps"])
+        if "python_random_state" in saved:
+            random.setstate(saved["python_random_state"])
+        if saved.get("torch_random_state") is not None:
+            torch.set_rng_state(saved["torch_random_state"].cpu())
+        if device.type == "cuda" and saved.get("cuda_random_state_all") is not None:
+            torch.cuda.set_rng_state_all(saved["cuda_random_state_all"])
+        initial_loss = float(saved["initial_validation_loss"])
+        last_loss = float(saved.get("train_loss_last", float("nan")))
+        print(json.dumps({"event":"resume_loaded","completed_steps":completed_steps,"target_steps":args.steps,"checkpoint":str(state_path)}), flush=True)
+        if completed_steps >= args.steps:
+            print(json.dumps({"event":"already_at_or_beyond_target","completed_steps":completed_steps,"target_steps":args.steps}), flush=True)
+    if initial_loss is None:
+        initial_loss = evaluate(model, val_ids, args.context, device=device)
+    session_start_step = completed_steps
+    started = time.time(); model.train()
+    memory_stopped = False; peak_observed_mib = 0.0; memory_metric = "unknown"
+    signature = {
+        "corpus_sha256": corpus_sha256, "validation_sha256": validation_sha256, "split_mode": split_mode, "neurons": args.neurons, "width": args.width,
+        "active_k": args.active_k, "fanout": args.fanout, "max_steps": args.max_steps,
+        "context": args.context, "batch_size": args.batch_size, "vocab_size": args.vocab_size,
+        "seed": args.seed, "lr": args.lr, "step_penalty": args.step_penalty,
+    }
+
+    def save_resume_state(step):
+        payload = {
+            "format":"aimeng-resumable-training-state-v1", "resume_signature":signature,
+            "config":vars(args), "stoi":stoi, "itos":itos, "model_state":model.state_dict(),
+            "optimizer_state":optimizer.state_dict(), "completed_steps":step,
+            "initial_validation_loss":initial_loss, "train_loss_last":last_loss,
+            "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode, "saved_at_unix":time.time(),
+            "python_random_state":random.getstate(), "torch_random_state":torch.get_rng_state(),
+            "cuda_random_state_all":torch.cuda.get_rng_state_all() if device.type == "cuda" else None,
+        }
+        _atomic_torch_save(payload, state_path)
+        print(json.dumps({"event":"checkpoint_saved","step":step,"path":str(state_path)}), flush=True)
+
+    if completed_steps < args.steps:
+        for step, (x, y) in enumerate(batches(train_ids, args.context, args.batch_size, args.steps, args.seed + 1), 1):
+            if step <= completed_steps:
+                continue
+            if step % 25 == 0 or step == completed_steps + 1:
+                current_mib, memory_metric, _ = process_memory_mib()
+                peak_observed_mib = max(peak_observed_mib, current_mib)
+                if current_mib >= args.memory_stop_mib:
+                    memory_stopped = True
+                    print(json.dumps({"event":"safe_stop_memory_limit", "step":step, "measured_mib":round(current_mib,1), "metric":memory_metric, "limit_mib":args.memory_stop_mib}), flush=True)
+                    break
+            x = x.to(device, non_blocking=True); y = y.to(device, non_blocking=True)
+            optimizer.zero_grad(set_to_none=True)
+            out = model(x, early_stop=False)
+            task_loss = F.cross_entropy(out["logits"], y)
+            loss = task_loss + args.step_penalty * out["expected_steps"].mean()
+            if not torch.isfinite(loss):
+                save_resume_state(completed_steps)
+                raise RuntimeError(f"non-finite loss at step {step}; last safe checkpoint preserved")
+            loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step()
+            completed_steps = step
+            last_loss = float(task_loss.detach())
+            if step == 1 or step % args.log_every == 0 or step == args.steps:
+                print(json.dumps({"step":step, "steps":args.steps, "train_loss":round(last_loss,5),
+                                  "mean_expected_steps":round(float(out["expected_steps"].mean().detach()),3)}, ensure_ascii=False), flush=True)
+            if step % args.checkpoint_every == 0 or step == args.steps:
+                save_resume_state(completed_steps)
+    # Always persist the latest safe state, including memory-triggered early stops.
+    save_resume_state(completed_steps)
+    final_loss = evaluate(model, val_ids, args.context, device=device)
     checkpoint = {"format":"aimeng-sparse-diffusion-char-v1", "config":vars(args), "stoi":stoi, "itos":itos,
                   "model_state":model.state_dict(), "initial_validation_loss":initial_loss,
                   "final_validation_loss":final_loss, "train_loss_last":last_loss,
                   "validation_characters":len(val_ids), "source":"user_corpus" if args.text else "built_in_smoke_corpus",
+                  "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode,
                   "warning":"A smoke corpus validates code execution only; it is not evidence of general language ability."}
-    torch.save(checkpoint, out_dir / "diffusion_checkpoint.pt")
+    _atomic_torch_save(checkpoint, out_dir / "diffusion_checkpoint.pt")
     current_mib, final_metric, peak_rss_mib = process_memory_mib()
     peak_observed_mib = max(peak_observed_mib, current_mib)
     report = {"format":"aimeng-diffusion-training-report-v1", "steps_requested":args.steps, "steps_completed":completed_steps,
               "neurons":args.neurons, "hidden_width":args.width, "active_top_k":args.active_k,
               "fanout":args.fanout, "max_diffusion_steps":args.max_steps, "vocab_size":len(itos),
-              "source":checkpoint["source"], "initial_validation_loss":initial_loss,
+              "trainable_parameter_count":sum(p.numel() for p in model.parameters()),
+              "estimated_fp32_weight_mib":round(sum(p.numel() for p in model.parameters()) * 4 / 1024**2, 3),
+              "optimizer_steps_completed":completed_steps,
+              "training_target_characters_seen":completed_steps * args.batch_size,
+              "training_context_characters_processed":completed_steps * args.batch_size * args.context,
+              "steps_per_second_this_session":round((completed_steps - session_start_step) / max(1e-9, time.time()-started), 3),
+              "source":checkpoint["source"], "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode, "initial_validation_loss":initial_loss,
               "final_validation_loss":final_loss, "train_loss_last":last_loss,
-              "checkpoint":"diffusion_checkpoint.pt", "elapsed_seconds":round(time.time()-started,2),
+              "checkpoint":"diffusion_checkpoint.pt", "resumable_state":"training_state.pt",
+              "elapsed_seconds_this_session":round(time.time()-started,2),
               "memory_metric":final_metric, "current_memory_mib":round(current_mib,1),
               "peak_observed_memory_mib":round(peak_observed_mib,1), "process_peak_rss_mib":round(peak_rss_mib,1),
               "memory_stop_limit_mib":args.memory_stop_mib, "stopped_for_memory":memory_stopped,
+              "device":str(device), "gpu_name":torch.cuda.get_device_name(0) if device.type == "cuda" else None,
+              "gpu_peak_allocated_mib":round(torch.cuda.max_memory_allocated(device)/1024**2,1) if device.type == "cuda" else None,
               "status":"safe_stopped_memory" if memory_stopped else ("loss_improved" if final_loss < initial_loss else "needs_investigation"),
               "warning":checkpoint["warning"]}
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
@@ -270,12 +369,15 @@ def generate_from_checkpoint(checkpoint_path: str, prompt: str, count: int, temp
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--text", type=str, default=None, help="UTF-8 corpus file; omitted means synthetic smoke data only")
+    p.add_argument("--text", type=str, default=None, help="UTF-8 training corpus file; omitted means synthetic smoke data only")
+    p.add_argument("--validation-text", type=str, default=None, help="Separate UTF-8 validation corpus; vocab is fitted on training text only")
     p.add_argument("--checkpoint", type=str, default=None, help="load a checkpoint for terminal-only text generation")
     p.add_argument("--prompt", type=str, default="", help="prompt used with --checkpoint")
     p.add_argument("--generate-tokens", type=int, default=120, help="characters to generate with --checkpoint")
     p.add_argument("--temperature", type=float, default=0.8, help="sampling temperature for generation")
     p.add_argument("--steps", type=int, default=1000); p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--resume", action="store_true", help="resume from OUTPUT/training_state.pt; corpus and core settings must match")
+    p.add_argument("--checkpoint-every", type=int, default=25, help="save resumable state every N completed steps")
     p.add_argument("--context", type=int, default=32); p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--vocab-size", type=int, default=2048, help="maximum vocabulary including <unk>; Android currently supports up to 2048")
     p.add_argument("--neurons", type=int, default=128); p.add_argument("--width", type=int, default=32)
@@ -288,8 +390,8 @@ def main():
     if args.checkpoint:
         generate_from_checkpoint(args.checkpoint, args.prompt, args.generate_tokens, args.temperature)
         return 0
-    if args.steps < 1 or args.context < 2 or args.context > 512 or args.vocab_size < 2 or args.vocab_size > 2048 or args.batch_size < 1 or args.max_steps < 1 or args.log_every < 1:
-        p.error("steps/batch-size/max-steps/log-every must be positive; context must be 2..512 and vocab-size 2..2048")
+    if args.steps < 1 or args.context < 2 or args.context > 512 or args.vocab_size < 2 or args.vocab_size > 2048 or args.batch_size < 1 or args.max_steps < 1 or args.log_every < 1 or args.checkpoint_every < 1:
+        p.error("steps/batch-size/max-steps/log-every/checkpoint-every must be positive; context must be 2..512 and vocab-size 2..2048")
     report=train(args)
     return 0 if math.isfinite(report["final_validation_loss"]) else 1
 if __name__ == "__main__": raise SystemExit(main())
