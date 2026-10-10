@@ -24,7 +24,7 @@ The most recent safe state is saved even when the memory guard stops a run. Chec
 
 ## Dataset and license
 
-The automatic fallback is the training split of WikiText-2 raw-v1 from the Hugging Face dataset `Salesforce/wikitext`. It is English-only and intentionally a small pipeline baseline, not a claim of Chinese, multilingual, conversational, or general language competence. Review the upstream dataset card and license before redistributing the downloaded corpus. The notebook stores the corpus in Drive and does not commit it to Git.
+The current notebook fallback is up to 50,000 instruction/answer records from `BelleGroup/train_0.5M_CN` via `scripts/prepare_speaking_corpus.py`. It is a Chinese instruction-format starter only, not a sufficient full curriculum or evidence of general language competence. Review upstream dataset terms/license before use. See [LANGUAGE_CURRICULUM.md](LANGUAGE_CURRICULUM.md) for required curriculum layers and evaluation gates. Review the upstream dataset card and license before redistributing the downloaded corpus. The notebook stores the corpus in Drive and does not commit it to Git.
 
 For a Chinese or multilingual experiment, supply a UTF-8 corpus that you have permission to use. Record its exact source, version, license, preprocessing, and SHA-256 with the run. Keep train/validation/test data separated by document or source where possible; the current trainer's simple contiguous 90/10 split is only a baseline and may leak repetitive/source-specific patterns.
 
