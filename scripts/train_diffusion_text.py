@@ -144,8 +144,9 @@ def batches(ids: list[int], context: int, batch_size: int, steps: int, seed: int
         y = torch.tensor([ids[s+context] for s in starts], dtype=torch.long)
         yield x, y
 
-def evaluate(model, ids, context, limit=512):
+def evaluate(model, ids, context, limit=512, device=None):
     model.eval()
+    device = device or next(model.parameters()).device
     if len(ids) <= context + 1:
         return float("nan")
     starts = list(range(min(len(ids)-context-1, limit)))
@@ -153,8 +154,8 @@ def evaluate(model, ids, context, limit=512):
     with torch.no_grad():
         for offset in range(0, len(starts), 64):
             ss = starts[offset:offset+64]
-            x = torch.tensor([ids[s:s+context] for s in ss], dtype=torch.long)
-            y = torch.tensor([ids[s+context] for s in ss], dtype=torch.long)
+            x = torch.tensor([ids[s:s+context] for s in ss], dtype=torch.long, device=device)
+            y = torch.tensor([ids[s+context] for s in ss], dtype=torch.long, device=device)
             total += F.cross_entropy(model(x, early_stop=False)["logits"], y, reduction="sum").item()
     return total / len(starts)
 
@@ -192,9 +193,13 @@ def train(args):
     train_text, val_text = source[:cut], source[cut:]
     stoi, itos = make_vocab(source, args.vocab_size)
     train_ids, val_ids = encode(train_text, stoi), encode(val_text, stoi)
-    model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps).to(device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    print(json.dumps({"event":"device_selected", "device":str(device), "gpu":torch.cuda.get_device_name(0) if device.type == "cuda" else None}), flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    initial_loss = evaluate(model, val_ids, args.context)
+    initial_loss = evaluate(model, val_ids, args.context, device=device)
     started = time.time(); model.train(); last_loss = float("nan"); completed_steps = 0
     memory_stopped = False; peak_observed_mib = 0.0; memory_metric = "unknown"
     for step, (x, y) in enumerate(batches(train_ids, args.context, args.batch_size, args.steps, args.seed + 1), 1):
@@ -206,6 +211,7 @@ def train(args):
                 print(json.dumps({"event":"safe_stop_memory_limit", "step":step, "measured_mib":round(current_mib,1), "metric":memory_metric, "limit_mib":args.memory_stop_mib}), flush=True)
                 break
         completed_steps = step
+        x = x.to(device, non_blocking=True); y = y.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
         out = model(x, early_stop=False)
         task_loss = F.cross_entropy(out["logits"], y)
@@ -217,7 +223,7 @@ def train(args):
         if step == 1 or step % args.log_every == 0 or step == args.steps:
             print(json.dumps({"step":step, "steps":args.steps, "train_loss":round(last_loss,5),
                               "mean_expected_steps":round(float(out["expected_steps"].mean().detach()),3)}, ensure_ascii=False), flush=True)
-    final_loss = evaluate(model, val_ids, args.context)
+    final_loss = evaluate(model, val_ids, args.context, device=device)
     out_dir = Path(args.output); out_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = {"format":"aimeng-sparse-diffusion-char-v1", "config":vars(args), "stoi":stoi, "itos":itos,
                   "model_state":model.state_dict(), "initial_validation_loss":initial_loss,
@@ -236,6 +242,8 @@ def train(args):
               "memory_metric":final_metric, "current_memory_mib":round(current_mib,1),
               "peak_observed_memory_mib":round(peak_observed_mib,1), "process_peak_rss_mib":round(peak_rss_mib,1),
               "memory_stop_limit_mib":args.memory_stop_mib, "stopped_for_memory":memory_stopped,
+              "device":str(device), "gpu_name":torch.cuda.get_device_name(0) if device.type == "cuda" else None,
+              "gpu_peak_allocated_mib":round(torch.cuda.max_memory_allocated(device)/1024**2,1) if device.type == "cuda" else None,
               "status":"safe_stopped_memory" if memory_stopped else ("loss_improved" if final_loss < initial_loss else "needs_investigation"),
               "warning":checkpoint["warning"]}
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
