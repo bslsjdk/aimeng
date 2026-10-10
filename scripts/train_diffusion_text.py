@@ -34,8 +34,16 @@ class DiffusionTextModel(nn.Module):
         self.gate = nn.Linear(width * 2, width)
         self.decoder = nn.Linear(width, vocab_size)
         self.halt_head = nn.Linear(width, 1)
-        # Deterministic directed graph: local ring links.
-        rows = [[(i + j + 1) % neurons for j in range(fanout)] for i in range(neurons)]
+        # Deterministic bidirectional ring graph: each node can send waves both ways.
+        # Even fanout gives symmetric +/- offsets; odd fanout adds one extra forward edge.
+        rows = []
+        for i in range(neurons):
+            row = []
+            for distance in range(1, fanout // 2 + 1):
+                row.extend(((i - distance) % neurons, (i + distance) % neurons))
+            if fanout % 2:
+                row.append((i + fanout // 2 + 1) % neurons)
+            rows.append(row)
         self.register_buffer("neighbors", torch.tensor(rows, dtype=torch.long))
         self.edge_logits = nn.Parameter(torch.zeros(neurons, fanout))
 
