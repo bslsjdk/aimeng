@@ -10,7 +10,7 @@
   - `report.json`: metrics and configuration summary.
   - `training.log`: persistent stdout/stderr log captured by the notebook.
 
-The notebook uses `MyDrive/aimeng_corpus.txt` and `MyDrive/aimeng_runs/`. Do not delete those Drive paths after disconnecting Colab.
+The notebook keeps the raw starter corpus at `MyDrive/aimeng_corpus_raw.txt`, train/validation/test files and `split_manifest.json` under `MyDrive/aimeng_language_splits/`, and run artifacts under `MyDrive/aimeng_runs/`. Do not delete those Drive paths after disconnecting Colab.
 
 ## Start / resume
 
@@ -24,9 +24,9 @@ The most recent safe state is saved even when the memory guard stops a run. Chec
 
 ## Dataset and license
 
-The current notebook fallback is up to 50,000 instruction/answer records from `BelleGroup/train_0.5M_CN` via `scripts/prepare_speaking_corpus.py`. It is a Chinese instruction-format starter only, not a sufficient full curriculum or evidence of general language competence. Review upstream dataset terms/license before use. See [LANGUAGE_CURRICULUM.md](LANGUAGE_CURRICULUM.md) for required curriculum layers and evaluation gates. Review the upstream dataset card and license before redistributing the downloaded corpus. The notebook stores the corpus in Drive and does not commit it to Git.
+The current notebook fallback is up to 50,000 instruction/answer records from `BelleGroup/train_0.5M_CN` via `scripts/prepare_speaking_corpus.py`. It is a Chinese instruction-format starter only, not a sufficient full curriculum or evidence of general language competence. Review upstream dataset terms/license before use. See [LANGUAGE_CURRICULUM.md](LANGUAGE_CURRICULUM.md) for required curriculum layers and evaluation gates. Review the upstream dataset card and license before redistributing the downloaded corpus. The notebook stores the corpus in Drive and does not commit it to Git. It runs `scripts/prepare_language_splits.py` to remove exact duplicate records before a deterministic 90/5/5 split and writes source/split SHA-256 hashes and record counts to a manifest.
 
-For a Chinese or multilingual experiment, supply a UTF-8 corpus that you have permission to use. Record its exact source, version, license, preprocessing, and SHA-256 with the run. Keep train/validation/test data separated by document or source where possible; the current trainer's simple contiguous 90/10 split is only a baseline and may leak repetitive/source-specific patterns.
+For a Chinese or multilingual experiment, supply a UTF-8 corpus that you have permission to use. Record its exact source, version, license, preprocessing, and SHA-256 with the run. The Colab notebook passes `train.txt` and `validation.txt` separately; vocabulary is fitted on training text only, so validation-only characters map to `<unk>`. `test.txt` is reserved for final evaluation and must not be used for tuning. The legacy contiguous 90/10 split remains only for manual commands that omit `--validation-text`.
 
 ## Compute/time efficiency
 
