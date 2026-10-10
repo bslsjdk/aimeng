@@ -25,8 +25,8 @@ class DiffusionTextTests(unittest.TestCase):
         with torch.no_grad():
             pa = model.position_embedding(torch.arange(a.shape[1]))[None, :, :]
             pb = model.position_embedding(torch.arange(b.shape[1]))[None, :, :]
-            ca = model.context_proj((model.embedding(a) + pa).mean(dim=1))
-            cb = model.context_proj((model.embedding(b) + pb).mean(dim=1))
+            ca = model.context_proj((model.embedding(a) * (1.0 + pa)).mean(dim=1))
+            cb = model.context_proj((model.embedding(b) * (1.0 + pb)).mean(dim=1))
         self.assertFalse(torch.allclose(ca, cb), "ordered sequences must have distinguishable context vectors")
 
     def test_vocab_is_bounded_for_mobile(self):
