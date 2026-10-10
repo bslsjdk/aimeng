@@ -256,8 +256,13 @@ def generate_from_checkpoint(checkpoint_path: str, prompt: str, count: int, temp
             ids = [stoi.get(ch, 0) for ch in context]
             out = model(torch.tensor([ids], dtype=torch.long), early_stop=True)
             probs = torch.softmax(out["logits"][0] / max(0.05, temperature), dim=-1)
+            # ID 0 is the fallback for out-of-vocabulary characters, not printable text.
+            # Never emit the literal string "<unk>" into user-facing generations.
+            if probs.numel() > 0:
+                probs[0] = 0
+                probs = probs / probs.sum().clamp_min(1e-12)
             next_id = int(torch.multinomial(probs, 1).item())
-            generated.append(itos[next_id] if next_id < len(itos) else "")
+            generated.append(itos[next_id] if 0 < next_id < len(itos) else "")
     result = "".join(generated)
     print(json.dumps({"prompt":prompt, "generated_text":result, "generated_characters":count,
                       "checkpoint_source":ckpt.get("source","unknown"), "warning":ckpt.get("warning","")}, ensure_ascii=False), flush=True)
