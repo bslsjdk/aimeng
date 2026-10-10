@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Create deterministic, record-level train/validation/test files from UTF-8 text.
 
-Records are separated by one or more blank lines. Exact normalized duplicates are
+Records are separated by three or more newline characters. The corpus-preparation script
+uses this delimiter while preserving ordinary paragraph breaks inside examples. Exact normalized duplicates are
 removed BEFORE splitting, preventing the same record from appearing in multiple splits.
 Raw corpus files and split outputs should remain in persistent storage, not Git.
 """
@@ -23,7 +24,7 @@ def split_records(source: str, seed: int = 7, train_ratio: float = 0.90,
                   validation_ratio: float = 0.05):
     if train_ratio <= 0 or validation_ratio <= 0 or train_ratio + validation_ratio >= 1:
         raise ValueError("train_ratio and validation_ratio must be positive and sum to less than 1")
-    raw_records = re.split(r"\n\s*\n+", source.replace("\r\n", "\n").replace("\r", "\n"))
+    raw_records = re.split(r"\n{3,}", source.replace("\r\n", "\n").replace("\r", "\n"))
     records = []
     seen = set()
     duplicates = 0
