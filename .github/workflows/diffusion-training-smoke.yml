@@ -47,7 +47,7 @@ jobs:
       - name: Install CPU training runtime
         run: python -m pip install --upgrade pip torch datasets
       - name: Unit tests
-        run: python -m unittest tests.test_diffusion_text tests.test_prepare_speaking_corpus -v
+        run: python -m unittest tests.test_diffusion_text tests.test_prepare_speaking_corpus tests.test_export_mobile_diffusion -v
       - name: Select staged experiment
         id: config
         shell: bash
@@ -126,26 +126,37 @@ jobs:
           p = Path(f"runs/level-{level}/generated_sample.json")
           sample = json.loads(p.read_text(encoding="utf-8"))
           assert sample.get("generated_text") and sample.get("checkpoint_source") == "user_corpus"
-          print("Generated sample saved for human review; it is not an automatic quality pass.")
+          print("Generated sample saved for human review; this is not an automatic language-quality pass.")
           print(sample["generated_text"])
           PY
-      - name: Export portable Android weight bundle
+      - name: Export portable JSON and new binary Android import file
         env:
           LEVEL: ${{ steps.config.outputs.level }}
         run: |
+          set -euo pipefail
           python scripts/export_mobile_diffusion.py \
             --checkpoint "runs/level-$LEVEL/diffusion_checkpoint.pt" \
-            --output "runs/level-$LEVEL/mobile_diffusion.json"
+            --output "runs/level-$LEVEL/mobile_diffusion.json" \
+            --binary-output "runs/level-$LEVEL/mobile_diffusion.aimg"
           python - <<'PY'
-          import json
+          import gzip, hashlib, json, os, struct
           from pathlib import Path
-          p = Path("runs/level-${{ steps.config.outputs.level }}/mobile_diffusion.json")
+          root = Path(f"runs/level-{os.environ['LEVEL']}")
+          p = root / "mobile_diffusion.json"
           bundle = json.loads(p.read_text(encoding="utf-8"))
           assert bundle["format"] == "aimeng-mobile-diffusion-json-v1"
           assert bundle["tensors"] and bundle["itos"]
-          print(f"Portable bundle validated: {p.stat().st_size} bytes; {len(bundle['tensors'])} tensors")
+          packed = (root / "mobile_diffusion.aimg").read_bytes()
+          assert packed[:4] == b"AIMG", "missing AIMG magic"
+          version, size = struct.unpack(">II", packed[4:12])
+          raw = gzip.decompress(packed[44:])
+          assert version == 1 and len(raw) == size
+          assert hashlib.sha256(raw).digest() == packed[12:44]
+          assert json.loads(raw)["format"] == bundle["format"]
+          print(f"Portable JSON validated: {p.stat().st_size} bytes")
+          print(f"New Android import validated: {len(packed)} bytes, AIMG v{version}")
           PY
-      - name: Upload checkpoint, portable bundle and report
+      - name: Upload checkpoint, portable bundle, speech sample and report
         uses: actions/upload-artifact@v4
         with:
           name: aimeng-diffusion-level-${{ steps.config.outputs.level }}-${{ github.run_number }}
