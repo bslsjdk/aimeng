@@ -30,6 +30,7 @@ class DiffusionTextModel(nn.Module):
         # Position embeddings are essential: a mean of token embeddings alone
         # cannot distinguish sequences such as "我喜欢你" and "你喜欢我".
         self.position_embedding = nn.Embedding(512, width)
+        nn.init.normal_(self.position_embedding.weight, mean=0.0, std=0.02)
         self.node_embedding = nn.Parameter(torch.randn(neurons, width) * 0.08)
         self.context_proj = nn.Linear(width, width)
         self.self_proj = nn.Linear(width, width, bias=False)
@@ -57,7 +58,11 @@ class DiffusionTextModel(nn.Module):
         if tokens.shape[1] > self.position_embedding.num_embeddings:
             raise ValueError("input context exceeds positional embedding limit")
         positions = torch.arange(tokens.shape[1], device=tokens.device)
-        ordered_embeddings = self.embedding(tokens) + self.position_embedding(positions)[None, :, :]
+        token_embeddings = self.embedding(tokens)
+        positional = self.position_embedding(positions)[None, :, :]
+        # Multiplicative interaction binds each token to its position before pooling;
+        # adding position vectors then averaging would cancel order information.
+        ordered_embeddings = token_embeddings * (1.0 + positional)
         context = torch.tanh(self.context_proj(ordered_embeddings.mean(dim=1)))
         route_scores = context @ self.node_embedding.T / math.sqrt(self.width)
         seed_ids = route_scores.topk(self.active_k, dim=1).indices
