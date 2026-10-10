@@ -24,7 +24,7 @@ on:
         required: true
         default: "1000"
       corpus_path:
-        description: "Optional UTF-8 corpus file already committed to this branch, e.g. data/corpus.txt. Blank uses synthetic smoke text."
+        description: "Optional UTF-8 corpus file already committed to this branch. Blank automatically prepares up to 50,000 Chinese instruction/answer examples from BelleGroup/train_0.5M_CN."
         type: string
         required: false
         default: ""
@@ -45,7 +45,7 @@ jobs:
           python-version: '3.11'
           cache: pip
       - name: Install CPU training runtime
-        run: python -m pip install --upgrade pip torch
+        run: python -m pip install --upgrade pip torch datasets
       - name: Unit tests
         run: python -m unittest tests.test_diffusion_text -v
       - name: Select staged experiment
@@ -105,6 +105,9 @@ jobs:
           ARGS=(--steps "$STEPS" --neurons "$NEURONS" --width 32 --active-k "$ACTIVE_K" --fanout 8 --max-steps 6 --memory-stop-mib 2560 --output "runs/level-$LEVEL" --log-every 100)
           if [ -n "$CORPUS_PATH" ]; then
             ARGS+=(--text "$CORPUS_PATH")
+          else
+            python scripts/prepare_speaking_corpus.py --output "runs/level-$LEVEL/language_corpus.txt" --max-records 50000
+            ARGS+=(--text "runs/level-$LEVEL/language_corpus.txt")
           fi
           python scripts/train_diffusion_text.py "${ARGS[@]}"
       - name: Export portable Android weight bundle
