@@ -1,4 +1,4 @@
-name: Sparse diffusion training smoke test
+name: Sparse diffusion staged training
 
 on:
   push:
@@ -6,6 +6,33 @@ on:
   pull_request:
     branches: [feat/neuro-inspired-bounded-runtime]
   workflow_dispatch:
+    inputs:
+      level:
+        description: "Experiment level. Start with A; only advance after reviewing the report."
+        type: choice
+        required: true
+        default: A
+        options:
+          - A
+          - B
+          - C
+          - D
+          - E
+      steps:
+        description: "Training steps (start with 1000 for the first smoke run)"
+        type: string
+        required: true
+        default: "1000"
+      corpus_path:
+        description: "Optional UTF-8 corpus file already committed to this branch, e.g. data/corpus.txt. Blank uses synthetic smoke text."
+        type: string
+        required: false
+        default: ""
+      confirm_large_experiment:
+        description: "Required for level E (100,000 neurons); only enable after A-D show measurable benefit."
+        type: boolean
+        required: true
+        default: false
 
 jobs:
   train-and-test:
@@ -21,12 +48,69 @@ jobs:
         run: python -m pip install --upgrade pip torch
       - name: Unit tests
         run: python -m unittest tests.test_diffusion_text -v
-      - name: Train a reproducible smoke model
-        run: python scripts/train_diffusion_text.py --steps 1000 --neurons 128 --width 32 --active-k 8 --fanout 8 --max-steps 6 --output runs/diffusion-smoke --log-every 100
+      - name: Select staged experiment
+        id: config
+        shell: bash
+        env:
+          LEVEL: ${{ inputs.level || 'A' }}
+          REQUESTED_STEPS: ${{ inputs.steps || '1000' }}
+          CORPUS_PATH: ${{ inputs.corpus_path || '' }}
+          CONFIRM_LARGE: ${{ inputs.confirm_large_experiment || 'false' }}
+        run: |
+          set -euo pipefail
+          case "$LEVEL" in
+            A) NEURONS=128; ACTIVE_K=8 ;;
+            B) NEURONS=512; ACTIVE_K=16 ;;
+            C) NEURONS=2048; ACTIVE_K=64 ;;
+            D) NEURONS=8192; ACTIVE_K=256 ;;
+            E)
+              if [ "$CONFIRM_LARGE" != "true" ]; then
+                echo "Level E is gated. Review successful A-D reports first, then explicitly confirm." >&2
+                exit 2
+              fi
+              NEURONS=100000; ACTIVE_K=500
+              ;;
+            *) echo "Unknown experiment level: $LEVEL" >&2; exit 2 ;;
+          esac
+          if ! [[ "$REQUESTED_STEPS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "steps must be a positive integer" >&2
+            exit 2
+          fi
+          if [ "$LEVEL" = "E" ] && [ "$REQUESTED_STEPS" -gt 1000 ]; then
+            echo "Level E is capped at 1000 steps per GitHub Actions run; use a dedicated larger-memory experiment only after this probe." >&2
+            exit 2
+          fi
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "neurons=$NEURONS" >> "$GITHUB_OUTPUT"
+          echo "active_k=$ACTIVE_K" >> "$GITHUB_OUTPUT"
+          echo "steps=$REQUESTED_STEPS" >> "$GITHUB_OUTPUT"
+          echo "corpus_path=$CORPUS_PATH" >> "$GITHUB_OUTPUT"
+          echo "Selected level $LEVEL: neurons=$NEURONS active_k=$ACTIVE_K steps=$REQUESTED_STEPS"
+      - name: Validate optional corpus
+        if: ${{ steps.config.outputs.corpus_path != '' }}
+        env:
+          CORPUS_PATH: ${{ steps.config.outputs.corpus_path }}
+        run: test -s "$CORPUS_PATH"
+      - name: Train selected experiment
+        env:
+          LEVEL: ${{ steps.config.outputs.level }}
+          NEURONS: ${{ steps.config.outputs.neurons }}
+          ACTIVE_K: ${{ steps.config.outputs.active_k }}
+          STEPS: ${{ steps.config.outputs.steps }}
+          CORPUS_PATH: ${{ steps.config.outputs.corpus_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "runs/level-$LEVEL"
+          ARGS=(--steps "$STEPS" --neurons "$NEURONS" --width 32 --active-k "$ACTIVE_K" --fanout 8 --max-steps 6 --memory-stop-mib 2560 --output "runs/level-$LEVEL" --log-every 100)
+          if [ -n "$CORPUS_PATH" ]; then
+            ARGS+=(--text "$CORPUS_PATH")
+          fi
+          python scripts/train_diffusion_text.py "${ARGS[@]}"
       - name: Upload checkpoint and report
         uses: actions/upload-artifact@v4
         with:
-          name: aimeng-diffusion-smoke-checkpoint
-          path: runs/diffusion-smoke/
+          name: aimeng-diffusion-level-${{ steps.config.outputs.level }}-${{ github.run_number }}
+          path: runs/level-${{ steps.config.outputs.level }}/
           if-no-files-found: error
           retention-days: 14
