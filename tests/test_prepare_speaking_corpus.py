@@ -24,7 +24,7 @@ class SpeakingCorpusTests(unittest.TestCase):
         self.assertIn("助手：你好！", text)
 
     def test_normalize_removes_excess_whitespace(self):
-        self.assertEqual(normalize("  你好  \r\n\r\n\r\n 世界  "), "你好\n\n 世界")
+        self.assertEqual(normalize("  你好  \r\n\r\n\r\n 世界  "), "你好\n\n世界")
 
 
 if __name__ == "__main__":
