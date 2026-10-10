@@ -2,9 +2,9 @@ name: Sparse diffusion staged training
 
 on:
   push:
-    branches: [feat/sparse-diffusion-text-trainer]
+    branches: [feat/sparse-diffusion-text-trainer, feat/mobile-diffusion-export]
   pull_request:
-    branches: [feat/neuro-inspired-bounded-runtime]
+    branches: [feat/neuro-inspired-bounded-runtime, feat/sparse-diffusion-text-trainer]
   workflow_dispatch:
     inputs:
       level:
@@ -107,7 +107,23 @@ jobs:
             ARGS+=(--text "$CORPUS_PATH")
           fi
           python scripts/train_diffusion_text.py "${ARGS[@]}"
-      - name: Upload checkpoint and report
+      - name: Export portable Android weight bundle
+        env:
+          LEVEL: ${{ steps.config.outputs.level }}
+        run: |
+          python scripts/export_mobile_diffusion.py \
+            --checkpoint "runs/level-$LEVEL/diffusion_checkpoint.pt" \
+            --output "runs/level-$LEVEL/mobile_diffusion.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("runs/level-${{ steps.config.outputs.level }}/mobile_diffusion.json")
+          bundle = json.loads(p.read_text(encoding="utf-8"))
+          assert bundle["format"] == "aimeng-mobile-diffusion-json-v1"
+          assert bundle["tensors"] and bundle["itos"]
+          print(f"Portable bundle validated: {p.stat().st_size} bytes; {len(bundle['tensors'])} tensors")
+          PY
+      - name: Upload checkpoint, portable bundle and report
         uses: actions/upload-artifact@v4
         with:
           name: aimeng-diffusion-level-${{ steps.config.outputs.level }}-${{ github.run_number }}
