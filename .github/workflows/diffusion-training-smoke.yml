@@ -34,6 +34,10 @@ on:
         required: true
         default: false
 
+concurrency:
+  group: diffusion-training-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   train-and-test:
     runs-on: ubuntu-latest
