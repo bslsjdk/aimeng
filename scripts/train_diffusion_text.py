@@ -27,6 +27,9 @@ class DiffusionTextModel(nn.Module):
         self.neurons, self.width, self.active_k = neurons, width, active_k
         self.fanout, self.max_steps, self.energy_decay = fanout, max_steps, energy_decay
         self.embedding = nn.Embedding(vocab_size, width)
+        # Position embeddings are essential: a mean of token embeddings alone
+        # cannot distinguish sequences such as "我喜欢你" and "你喜欢我".
+        self.position_embedding = nn.Embedding(512, width)
         self.node_embedding = nn.Parameter(torch.randn(neurons, width) * 0.08)
         self.context_proj = nn.Linear(width, width)
         self.self_proj = nn.Linear(width, width, bias=False)
@@ -51,7 +54,11 @@ class DiffusionTextModel(nn.Module):
                 halt_threshold: float = 0.80, convergence_threshold: float = 0.025,
                 min_steps: int = 2):
         batch = tokens.shape[0]
-        context = torch.tanh(self.context_proj(self.embedding(tokens).mean(dim=1)))
+        if tokens.shape[1] > self.position_embedding.num_embeddings:
+            raise ValueError("input context exceeds positional embedding limit")
+        positions = torch.arange(tokens.shape[1], device=tokens.device)
+        ordered_embeddings = self.embedding(tokens) + self.position_embedding(positions)[None, :, :]
+        context = torch.tanh(self.context_proj(ordered_embeddings.mean(dim=1)))
         route_scores = context @ self.node_embedding.T / math.sqrt(self.width)
         seed_ids = route_scores.topk(self.active_k, dim=1).indices
         seed_state = torch.tanh(context[:, None, :] + self.node_embedding[seed_ids])
@@ -107,8 +114,14 @@ class DiffusionTextModel(nn.Module):
                 "expected_steps": expected_steps, "steps_used": len(logits_by_step),
                 "mean_delta": torch.stack(deltas).mean().detach()}
 
-def make_vocab(text: str):
-    chars = sorted(set(text))
+def make_vocab(text: str, max_vocab: int = 2048):
+    # Bound vocabulary to the Android runtime's current 2048-token safety limit.
+    # Keep frequent Chinese characters and role markers; rare characters map to <unk>.
+    from collections import Counter
+    if max_vocab < 2:
+        raise ValueError("max_vocab must be at least 2")
+    counts = Counter(text)
+    chars = [ch for ch, _ in counts.most_common(max_vocab - 1)]
     itos = ["<unk>"] + chars
     return {ch: i + 1 for i, ch in enumerate(chars)}, itos
 
@@ -172,7 +185,7 @@ def train(args):
         raise ValueError("corpus is too short for the chosen context length")
     cut = max(args.context + 2, int(len(source) * 0.9))
     train_text, val_text = source[:cut], source[cut:]
-    stoi, itos = make_vocab(source)
+    stoi, itos = make_vocab(source, args.vocab_size)
     train_ids, val_ids = encode(train_text, stoi), encode(val_text, stoi)
     model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
@@ -254,6 +267,7 @@ def main():
     p.add_argument("--temperature", type=float, default=0.8, help="sampling temperature for generation")
     p.add_argument("--steps", type=int, default=1000); p.add_argument("--seed", type=int, default=7)
     p.add_argument("--context", type=int, default=32); p.add_argument("--batch-size", type=int, default=16)
+    p.add_argument("--vocab-size", type=int, default=2048, help="maximum vocabulary including <unk>; Android currently supports up to 2048")
     p.add_argument("--neurons", type=int, default=128); p.add_argument("--width", type=int, default=32)
     p.add_argument("--active-k", type=int, default=8); p.add_argument("--fanout", type=int, default=8)
     p.add_argument("--max-steps", type=int, default=6); p.add_argument("--lr", type=float, default=0.002)
@@ -264,8 +278,8 @@ def main():
     if args.checkpoint:
         generate_from_checkpoint(args.checkpoint, args.prompt, args.generate_tokens, args.temperature)
         return 0
-    if args.steps < 1 or args.context < 2 or args.batch_size < 1 or args.max_steps < 1 or args.log_every < 1:
-        p.error("steps/context/batch-size/max-steps/log-every must be positive and context >= 2")
+    if args.steps < 1 or args.context < 2 or args.context > 512 or args.vocab_size < 2 or args.vocab_size > 2048 or args.batch_size < 1 or args.max_steps < 1 or args.log_every < 1:
+        p.error("steps/batch-size/max-steps/log-every must be positive; context must be 2..512 and vocab-size 2..2048")
     report=train(args)
     return 0 if math.isfinite(report["final_validation_loss"]) else 1
 if __name__ == "__main__": raise SystemExit(main())
