@@ -80,8 +80,8 @@ class DiffusionTextTests(unittest.TestCase):
 
 
     def test_record_splits_are_disjoint_and_deduplicated(self):
-        records = [f"问题：样本{i}\\n回答：答案{i}" for i in range(40)]
-        source = "\\n\\n".join(records + [records[3], records[7]]) + "\\n"
+        records = [f"问题：样本{i}\n回答：答案{i}" for i in range(40)]
+        source = "\n\n\n".join(records + [records[3], records[7]]) + "\n"
         splits, duplicates = split_records(source, seed=11)
         self.assertEqual(duplicates, 2)
         self.assertEqual(sum(len(rows) for rows in splits.values()), 40)
