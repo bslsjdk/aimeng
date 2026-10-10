@@ -47,7 +47,7 @@ jobs:
       - name: Install CPU training runtime
         run: python -m pip install --upgrade pip torch datasets
       - name: Unit tests
-        run: python -m unittest tests.test_diffusion_text -v
+        run: python -m unittest tests.test_diffusion_text tests.test_prepare_speaking_corpus -v
       - name: Select staged experiment
         id: config
         shell: bash
