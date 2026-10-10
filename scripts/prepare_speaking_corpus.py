@@ -56,8 +56,7 @@ def record_to_text(row: dict[str, Any]) -> str | None:
 def normalize(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = "\n".join(line.strip() for line in text.split("\n"))
-    # Collapse paragraph breaks inside an example so blank lines remain unambiguous record delimiters.
-    text = re.sub(r"\n{2,}", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
@@ -98,7 +97,8 @@ def prepare(dataset_name: str, split: str, output: Path, max_records: int,
     if not records:
         raise RuntimeError(f"No usable records from {dataset_name}; scanned={scanned}")
     random.Random(seed).shuffle(records)
-    corpus = "\n\n".join(records) + "\n"
+    # Three newline characters form a record boundary; internal paragraph breaks use at most two.
+    corpus = "\n\n\n".join(records) + "\n"
     output.parent.mkdir(parents=True, exist_ok=True)
     temp = output.with_suffix(output.suffix + ".tmp")
     temp.write_text(corpus, encoding="utf-8")
