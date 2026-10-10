@@ -25,7 +25,7 @@ A character-level model is an engineering baseline, not a claim that characters 
 
 ## Honest interpretation
 
-The hidden state is updated through repeated graph message passing. Only selected active source/destination nodes run the learned update function, while the full bounded state/energy arrays remain allocated. Thus this prototype sparsifies neural updates but still has indexing, aggregation, routing and readout costs; measure wall time and peak memory rather than assuming sparse always means faster.
+The hidden state is updated through repeated graph message passing on a bidirectional ring graph: neighbors exist in both directions, so messages can propagate forward and backward through graph links. This is graph direction, not a claim that semantic meaning is automatically understood. Only selected active source/destination nodes run the learned update function, while the full bounded state/energy arrays remain allocated. Thus this prototype sparsifies neural updates but still has indexing, aggregation, routing and readout costs; measure wall time and peak memory rather than assuming sparse always means faster.
 
 Text prediction is character-by-character for this first baseline. Internal diffusion runs multiple rounds before a prediction; this does not magically remove sequence dependence from generating arbitrary text. The learned halt distribution is trained with a small expected-step penalty, while runtime early stopping additionally requires a high halt score and a small state delta. Evaluate both output quality and steps used before relying on early stopping.
 
