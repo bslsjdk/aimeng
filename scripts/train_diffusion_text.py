@@ -286,6 +286,8 @@ def train(args):
                                   "mean_expected_steps":round(float(out["expected_steps"].mean().detach()),3)}, ensure_ascii=False), flush=True)
             if step % args.checkpoint_every == 0 or step == args.steps:
                 save_resume_state(completed_steps)
+    # Always persist the latest safe state, including memory-triggered early stops.
+    save_resume_state(completed_steps)
     final_loss = evaluate(model, val_ids, args.context, device=device)
     checkpoint = {"format":"aimeng-sparse-diffusion-char-v1", "config":vars(args), "stoi":stoi, "itos":itos,
                   "model_state":model.state_dict(), "initial_validation_loss":initial_loss,
