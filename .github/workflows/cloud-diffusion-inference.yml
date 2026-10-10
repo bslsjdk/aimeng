@@ -1,0 +1,122 @@
+name: Cloud diffusion text inference
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Prompt text (maximum 200 characters)"
+        type: string
+        required: true
+        default: "你好"
+      run_id:
+        description: "Successful training run ID containing the checkpoint artifact"
+        type: string
+        required: true
+        default: "38044104022"
+      artifact_name:
+        description: "Exact checkpoint artifact name from that run"
+        type: string
+        required: true
+        default: "aimeng-diffusion-level-A-5"
+      generate_tokens:
+        description: "Number of characters to generate (1-200)"
+        type: string
+        required: true
+        default: "80"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  infer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          PROMPT: ${{ inputs.prompt }}
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+          TOKEN_COUNT: ${{ inputs.generate_tokens }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          if [ "${#PROMPT}" -gt 200 ]; then
+            echo "Prompt must be at most 200 characters." >&2
+            exit 2
+          fi
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "run_id must be numeric." >&2; exit 2; }
+          [[ "$TOKEN_COUNT" =~ ^[0-9]+$ ]] && [ "$TOKEN_COUNT" -ge 1 ] && [ "$TOKEN_COUNT" -le 200 ] || {
+            echo "generate_tokens must be an integer from 1 to 200." >&2
+            exit 2
+          }
+          [ -n "$ARTIFACT_NAME" ] || { echo "artifact_name cannot be empty." >&2; exit 2; }
+
+      - name: Check out inference code
+        uses: actions/checkout@v4
+        with:
+          repository: bslsjdk/aimeng
+          ref: feat/sparse-diffusion-text-trainer
+          path: trainer
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CPU inference runtime
+        run: python -m pip install --disable-pip-version-check torch
+
+      - name: Download checkpoint from training run
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: model-artifact
+          repository: bslsjdk/aimeng
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Validate checkpoint files
+        run: |
+          set -euo pipefail
+          test -s model-artifact/diffusion_checkpoint.pt
+          test -s model-artifact/report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("model-artifact/report.json").read_text(encoding="utf-8"))
+          print("Training report summary:")
+          for key in ("source", "steps_completed", "neurons", "active_top_k", "final_validation_loss", "warning"):
+              if key in report:
+                  print(f"{key}: {report[key]}")
+          PY
+
+      - name: Generate text
+        shell: bash
+        env:
+          PROMPT: ${{ inputs.prompt }}
+          TOKEN_COUNT: ${{ inputs.generate_tokens }}
+        run: |
+          set -euo pipefail
+          python trainer/scripts/train_diffusion_text.py \
+            --checkpoint model-artifact/diffusion_checkpoint.pt \
+            --prompt "$PROMPT" \
+            --generate-tokens "$TOKEN_COUNT" | tee inference-result.json
+          {
+            echo "## Diffusion inference result"
+            echo
+            echo "JSON result:"
+            echo
+            cat inference-result.json
+            echo
+            echo "Note: this checkpoint was trained on a small synthetic smoke corpus. Successful generation verifies the inference path, not general Chinese language ability."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload generated result
+        uses: actions/upload-artifact@v4
+        with:
+          name: aimeng-diffusion-inference-result-${{ github.run_number }}
+          path: inference-result.json
+          if-no-files-found: error
+          retention-days: 14
