@@ -197,9 +197,21 @@ def train(args):
     if len(source) < args.context + 20:
         raise ValueError("corpus is too short for the chosen context length")
     corpus_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
-    cut = max(args.context + 2, int(len(source) * 0.9))
-    train_text, val_text = source[:cut], source[cut:]
-    stoi, itos = make_vocab(source, args.vocab_size)
+    validation_path = getattr(args, "validation_text", None)
+    if validation_path:
+        train_text = source
+        val_text = Path(validation_path).read_text(encoding="utf-8")
+        if len(val_text) < args.context + 2:
+            raise ValueError("validation corpus is too short for the chosen context length")
+        split_mode = "independent_file"
+    else:
+        # Legacy fallback only. Prefer record-level train/validation/test files.
+        cut = max(args.context + 2, int(len(source) * 0.9))
+        train_text, val_text = source[:cut], source[cut:]
+        split_mode = "legacy_contiguous_90_10"
+    validation_sha256 = hashlib.sha256(val_text.encode("utf-8")).hexdigest()
+    # Vocabulary is fitted on training text only: validation-only characters become <unk>.
+    stoi, itos = make_vocab(train_text, args.vocab_size)
     train_ids, val_ids = encode(train_text, stoi), encode(val_text, stoi)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps).to(device)
@@ -220,7 +232,7 @@ def train(args):
             raise ValueError("Unsupported checkpoint format; refusing unsafe resume")
         saved_config = saved.get("resume_signature", {})
         current_config = {
-            "corpus_sha256": corpus_sha256, "neurons": args.neurons, "width": args.width,
+            "corpus_sha256": corpus_sha256, "validation_sha256": validation_sha256, "split_mode": split_mode, "neurons": args.neurons, "width": args.width,
             "active_k": args.active_k, "fanout": args.fanout, "max_steps": args.max_steps,
             "context": args.context, "batch_size": args.batch_size, "vocab_size": args.vocab_size,
             "seed": args.seed, "lr": args.lr, "step_penalty": args.step_penalty,
@@ -246,7 +258,7 @@ def train(args):
     started = time.time(); model.train()
     memory_stopped = False; peak_observed_mib = 0.0; memory_metric = "unknown"
     signature = {
-        "corpus_sha256": corpus_sha256, "neurons": args.neurons, "width": args.width,
+        "corpus_sha256": corpus_sha256, "validation_sha256": validation_sha256, "split_mode": split_mode, "neurons": args.neurons, "width": args.width,
         "active_k": args.active_k, "fanout": args.fanout, "max_steps": args.max_steps,
         "context": args.context, "batch_size": args.batch_size, "vocab_size": args.vocab_size,
         "seed": args.seed, "lr": args.lr, "step_penalty": args.step_penalty,
@@ -258,7 +270,7 @@ def train(args):
             "config":vars(args), "stoi":stoi, "itos":itos, "model_state":model.state_dict(),
             "optimizer_state":optimizer.state_dict(), "completed_steps":step,
             "initial_validation_loss":initial_loss, "train_loss_last":last_loss,
-            "corpus_sha256":corpus_sha256, "saved_at_unix":time.time(),
+            "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode, "saved_at_unix":time.time(),
             "python_random_state":random.getstate(), "torch_random_state":torch.get_rng_state(),
             "cuda_random_state_all":torch.cuda.get_rng_state_all() if device.type == "cuda" else None,
         }
@@ -299,7 +311,7 @@ def train(args):
                   "model_state":model.state_dict(), "initial_validation_loss":initial_loss,
                   "final_validation_loss":final_loss, "train_loss_last":last_loss,
                   "validation_characters":len(val_ids), "source":"user_corpus" if args.text else "built_in_smoke_corpus",
-                  "corpus_sha256":corpus_sha256,
+                  "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode,
                   "warning":"A smoke corpus validates code execution only; it is not evidence of general language ability."}
     _atomic_torch_save(checkpoint, out_dir / "diffusion_checkpoint.pt")
     current_mib, final_metric, peak_rss_mib = process_memory_mib()
@@ -307,7 +319,7 @@ def train(args):
     report = {"format":"aimeng-diffusion-training-report-v1", "steps_requested":args.steps, "steps_completed":completed_steps,
               "neurons":args.neurons, "hidden_width":args.width, "active_top_k":args.active_k,
               "fanout":args.fanout, "max_diffusion_steps":args.max_steps, "vocab_size":len(itos),
-              "source":checkpoint["source"], "corpus_sha256":corpus_sha256, "initial_validation_loss":initial_loss,
+              "source":checkpoint["source"], "corpus_sha256":corpus_sha256, "validation_sha256":validation_sha256, "split_mode":split_mode, "initial_validation_loss":initial_loss,
               "final_validation_loss":final_loss, "train_loss_last":last_loss,
               "checkpoint":"diffusion_checkpoint.pt", "resumable_state":"training_state.pt",
               "elapsed_seconds_this_session":round(time.time()-started,2),
@@ -350,7 +362,8 @@ def generate_from_checkpoint(checkpoint_path: str, prompt: str, count: int, temp
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--text", type=str, default=None, help="UTF-8 corpus file; omitted means synthetic smoke data only")
+    p.add_argument("--text", type=str, default=None, help="UTF-8 training corpus file; omitted means synthetic smoke data only")
+    p.add_argument("--validation-text", type=str, default=None, help="Separate UTF-8 validation corpus; vocab is fitted on training text only")
     p.add_argument("--checkpoint", type=str, default=None, help="load a checkpoint for terminal-only text generation")
     p.add_argument("--prompt", type=str, default="", help="prompt used with --checkpoint")
     p.add_argument("--generate-tokens", type=int, default=120, help="characters to generate with --checkpoint")
