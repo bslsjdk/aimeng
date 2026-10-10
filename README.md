@@ -138,7 +138,8 @@ python scripts/validate_training_data.py --input examples/trajectory.example.jso
 
 - [Open the Google Colab notebook](https://colab.research.google.com/github/bslsjdk/aimeng/blob/feat/google-colab-d-training/notebooks/AIMENG_D0_Google_Colab.ipynb)
 - [Colab persistence and recovery guide](docs/COLAB_TRAINING.md)
+- [Language curriculum, architecture limits, and evidence gates](docs/LANGUAGE_CURRICULUM.md)
 - [Reproducible D0 configuration](configs/colab_d0.json)
 - [Dataset provenance and license notes](data/DATASET_PROVENANCE.md)
 
-The trainer now writes atomic resumable checkpoints (model + optimizer + completed step count) periodically. The notebook keeps corpus, checkpoints, report, and log in Google Drive so a Colab runtime reset does not erase the only copy. This is infrastructure preparation only; no Colab training run has been executed by this repository change. The WikiText-2 fallback is an English pipeline baseline, not evidence of general language competence.
+The trainer now writes atomic resumable checkpoints (model + optimizer + completed step count) periodically. The notebook keeps corpus, checkpoints, report, and log in Google Drive so a Colab runtime reset does not erase the only copy. This is infrastructure preparation only; no Colab training run has been executed by this repository change. The current 50,000-record Chinese instruction fallback is only a starter/pipeline baseline, not sufficient curriculum or evidence of general language competence. The architecture limits and data gates are documented in `docs/LANGUAGE_CURRICULUM.md`.
