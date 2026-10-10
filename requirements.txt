@@ -1,4 +1,5 @@
-# GGUF metadata/tensor reader distributed with llama.cpp
+# Existing GGUF metadata/tensor inspection tools
 gguf>=0.10.0
-# Official Hub client for cached/resumable multi-GB model downloads
 huggingface_hub>=0.30.0
+# Terminal-side sparse-diffusion training prototype
+torch>=2.2
