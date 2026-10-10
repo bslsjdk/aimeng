@@ -110,6 +110,46 @@ jobs:
             ARGS+=(--text "runs/level-$LEVEL/language_corpus.txt")
           fi
           python scripts/train_diffusion_text.py "${ARGS[@]}"
+      - name: Generate sample for manual speech-quality review
+        env:
+          LEVEL: \${{ steps.config.outputs.level }}
+        run: |
+          python scripts/train_diffusion_text.py \
+            --checkpoint "runs/level-$LEVEL/diffusion_checkpoint.pt" \
+            --prompt 
+          LEVEL: ${{ steps.config.outputs.level }}
+        run: |
+          python scripts/export_mobile_diffusion.py \
+            --checkpoint "runs/level-$LEVEL/diffusion_checkpoint.pt" \
+            --output "runs/level-$LEVEL/mobile_diffusion.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("runs/level-${{ steps.config.outputs.level }}/mobile_diffusion.json")
+          bundle = json.loads(p.read_text(encoding="utf-8"))
+          assert bundle["format"] == "aimeng-mobile-diffusion-json-v1"
+          assert bundle["tensors"] and bundle["itos"]
+          print(f"Portable bundle validated: {p.stat().st_size} bytes; {len(bundle['tensors'])} tensors")
+          PY
+      - name: Upload checkpoint, portable bundle and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aimeng-diffusion-level-${{ steps.config.outputs.level }}-${{ github.run_number }}
+          path: runs/level-${{ steps.config.outputs.level }}/
+          if-no-files-found: error
+          retention-days: 14
+用户：你好，请用自然的中文介绍一下你自己。\n助手：' \
+            --generate-tokens 160 --temperature 0.7 \
+            > "runs/level-$LEVEL/generated_sample.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("runs/level-\${{ steps.config.outputs.level }}/generated_sample.json")
+          sample = json.loads(p.read_text(encoding="utf-8"))
+          assert sample.get("generated_text") and sample.get("checkpoint_source") == "user_corpus"
+          print("Generated sample saved for human review; it is not an automatic quality pass.")
+          print(sample["generated_text"])
+          PY
       - name: Export portable Android weight bundle
         env:
           LEVEL: ${{ steps.config.outputs.level }}
