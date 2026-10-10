@@ -17,6 +17,23 @@ class DiffusionTextTests(unittest.TestCase):
         self.assertGreaterEqual(float(out["expected_steps"].min().detach()), 2.0)
         self.assertTrue(torch.isfinite(out["logits"]).all())
 
+    def test_order_information_is_not_discarded(self):
+        stoi, itos = make_vocab("我喜欢你你喜欢我")
+        model = DiffusionTextModel(len(itos), neurons=32, width=8, active_k=4, fanout=4, max_steps=2)
+        a = torch.tensor([[stoi[c] for c in "我喜欢你"]], dtype=torch.long)
+        b = torch.tensor([[stoi[c] for c in "你喜欢我"]], dtype=torch.long)
+        with torch.no_grad():
+            pa = model.position_embedding(torch.arange(a.shape[1]))[None, :, :]
+            pb = model.position_embedding(torch.arange(b.shape[1]))[None, :, :]
+            ca = model.context_proj((model.embedding(a) + pa).mean(dim=1))
+            cb = model.context_proj((model.embedding(b) + pb).mean(dim=1))
+        self.assertFalse(torch.allclose(ca, cb), "ordered sequences must have distinguishable context vectors")
+
+    def test_vocab_is_bounded_for_mobile(self):
+        stoi, itos = make_vocab("天地玄黄宇宙洪荒" * 1000, max_vocab=5)
+        self.assertEqual(len(itos), 5)
+        self.assertEqual(itos[0], "<unk>")
+
     def test_backward_updates_parameters(self):
         stoi, itos = make_vocab(SMOKE_TEXT)
         model = DiffusionTextModel(len(itos), neurons=32, width=8, active_k=4, fanout=4, max_steps=2)
