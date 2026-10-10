@@ -230,6 +230,12 @@ def train(args):
         model.load_state_dict(saved["model_state"])
         optimizer.load_state_dict(saved["optimizer_state"])
         completed_steps = int(saved["completed_steps"])
+        if "python_random_state" in saved:
+            random.setstate(saved["python_random_state"])
+        if saved.get("torch_random_state") is not None:
+            torch.set_rng_state(saved["torch_random_state"].cpu())
+        if device.type == "cuda" and saved.get("cuda_random_state_all") is not None:
+            torch.cuda.set_rng_state_all(saved["cuda_random_state_all"])
         initial_loss = float(saved["initial_validation_loss"])
         last_loss = float(saved.get("train_loss_last", float("nan")))
         print(json.dumps({"event":"resume_loaded","completed_steps":completed_steps,"target_steps":args.steps,"checkpoint":str(state_path)}), flush=True)
