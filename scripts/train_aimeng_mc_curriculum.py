@@ -375,6 +375,16 @@ def train_one_epoch(
     return loss_total / max(loss_denominator, 1e-8), correct_total / max(1, count_total)
 
 
+def parameter_count(model: nn.Module) -> int:
+    """Count trainable parameters without allocating additional model tensors."""
+    return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+
+
+def estimated_weight_mib(model: nn.Module) -> float:
+    """Approximate fp32 parameter storage only; excludes activations/framework/runtime overhead."""
+    return sum(parameter.numel() * parameter.element_size() for parameter in model.parameters()) / (1024.0 * 1024.0)
+
+
 def clone_state_dict(model: nn.Module) -> dict[str, Tensor]:
     return {name: value.detach().cpu().clone() for name, value in model.state_dict().items()}
 
@@ -657,6 +667,8 @@ def main() -> int:
         "stage": stage.name,
         "hidden_size": model.hidden_size,
         "encoder_width": model.encoder_width,
+        "trainable_parameters": parameter_count(model),
+        "fp32_weight_only_mib_estimate": round(estimated_weight_mib(model), 3),
         "epochs": args.epochs,
         "seed": args.seed,
         "device": str(device),
@@ -699,7 +711,9 @@ def main() -> int:
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(json.dumps({
         "checkpoint": str(args.output), "report": str(report_path), "stage": stage.name,
-        "hidden_size": model.hidden_size, "test_teacher_action_accuracy": test_accuracy,
+        "hidden_size": model.hidden_size, "trainable_parameters": parameter_count(model),
+        "fp32_weight_only_mib_estimate": round(estimated_weight_mib(model), 3),
+        "test_teacher_action_accuracy": test_accuracy,
         "validation_episode_success_rate": current_validation_rollout["success_rate"],
         "test_episode_success_rate": current_rollout["success_rate"],
         "test_episodes": current_rollout["episodes"], "expansion_events": expansion_events,
