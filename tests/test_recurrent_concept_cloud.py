@@ -69,6 +69,23 @@ class RecurrentConceptCloudTests(unittest.TestCase):
         losses["loss"].backward()
         self.assertTrue(torch.isfinite(self.model.cloud_head.weight.grad).all())
 
+    def test_oracle_cloud_is_loss_only_not_inference_logits(self):
+        x = torch.randint(0, 16, (3, 5))
+        y = torch.tensor([8, 9, 13])
+        train_output = self.model(x, target=y)
+        inference_output = self.model(x)
+        floor = torch.finfo(inference_output["logits"].dtype).min
+        for row, target in enumerate(y):
+            if not bool(train_output["target_routed"][row]):
+                self.assertEqual(float(train_output["logits"][row, target]), floor)
+        self.assertIn("oracle_token_logits", train_output)
+        self.assertNotIn("oracle_token_logits", inference_output)
+        losses = self.model.loss(train_output, y)
+        self.assertTrue(torch.isfinite(losses["oracle_token_loss"]))
+        losses["loss"].backward()
+        self.assertIsNotNone(self.model.token_bias.grad)
+        self.assertTrue(torch.isfinite(self.model.token_bias.grad).all())
+
 
 if __name__ == "__main__":
     unittest.main()
