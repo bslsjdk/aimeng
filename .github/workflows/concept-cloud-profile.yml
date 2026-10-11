@@ -25,11 +25,15 @@ jobs:
       - name: Check syntax
         run: python -m py_compile scripts/profile_recurrent_concept_cloud.py scripts/experiment_recurrent_concept_cloud.py
       - name: Profile inference operators
+        env:
+          PYTHONPATH: .
         run: |
+          set -o pipefail
           python scripts/profile_recurrent_concept_cloud.py --batch-size 64 --seq-len 8 --warmup 10 --iterations 30 --threads 1 --cycles 4 | tee concept-cloud-profile.json
       - name: Upload profile results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: concept-cloud-inference-profile
           path: concept-cloud-profile.json
-          if-no-files-found: error
+          if-no-files-found: warn
