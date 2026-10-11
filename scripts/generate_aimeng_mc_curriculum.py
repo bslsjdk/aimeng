@@ -199,20 +199,20 @@ def make_course(stage: Stage, seed: int):
     # Retry a few deterministic per-episode seeds if random props happen to block the route.
     route = shortest_teacher_route(start, goal, start_yaw, platforms, obstacles, stage)
     if not route:
-        return make_course(stage, seed + 1)
+        raise RuntimeError(f"could not construct a reachable {stage.name} course for seed {seed}")
     if stage.gap_distance and not any(action in {
         "jump_forward", "gap_jump_forward", "rotating_jump_left", "rotating_jump_right",
         "super_jump_forward", "double_jump_forward",
     } for _, action, _ in route):
-        return make_course(stage, seed + 1)
+        raise RuntimeError(f"{stage.name} course for seed {seed} did not exercise its required jump action")
     if stage.name == "obstacle_avoidance" and not any(
         action in ("turn_left", "turn_right") for _, action, _ in route
     ):
-        return make_course(stage, seed + 1)
+        raise RuntimeError(f"{stage.name} course for seed {seed} did not require a turn")
     if stage.name == "turning" and not any(
         action in ("turn_left", "turn_right") for _, action, _ in route
     ):
-        return make_course(stage, seed + 1)
+        raise RuntimeError(f"{stage.name} course for seed {seed} did not require a turn")
     return platforms, obstacles, start, goal, start_yaw, route
 
 
@@ -266,8 +266,12 @@ def generate_records(stage_name: str, seed: int, episodes: int) -> Iterable[dict
         raise ValueError("episodes must be >= 1")
     stage = STAGE_BY_NAME[stage_name]
     master_rng = random.Random(seed)
+    used_map_seeds: set[int] = set()
     for episode_index in range(episodes):
         map_seed = master_rng.randrange(0, 2**31)
+        while map_seed in used_map_seeds:
+            map_seed = master_rng.randrange(0, 2**31)
+        used_map_seeds.add(map_seed)
         platforms, obstacles, start, goal, start_yaw, route = make_course(stage, map_seed)
         episode_id = f"{stage.name}-seed-{map_seed}-ep-{episode_index}"
         # Split by whole episode/map seed, never by adjacent frames.
