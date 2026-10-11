@@ -4,7 +4,7 @@
 
 - Dataset generation and evaluation-gate inspection use only Python's standard library.
 - The recurrent policy trainer requires PyTorch and should run in GitHub Actions or another training host, not be assumed to work in an Android terminal.
-- The current controller receives a structured 405-cell voxel observation (9×5×9), relative target offset and a four-way heading bucket. It is not image-based vision.
+- The current controller receives a structured 405-cell voxel observation (9×5×9), relative target offset and a four-way heading bucket. It is not image-based vision. The curriculum generator varies the easy walking stage's start position, heading and target distance, while keeping its only unlocked actions as walk-forward and stop.
 - The trained checkpoint is a cloud-side `.pt` research checkpoint. It is not an AIMG package, not an Android app model, and not connected to live Bedrock action control yet.
 
 ## Recommended first run on a phone
@@ -48,12 +48,14 @@ The model expands only when `--auto-expand` is enabled and the **current stage's
 
 ## What the report means
 
+The data is split by whole map/episode seed, never adjacent frames: 75% train, 10% validation, 10% final test, and 5% retention audit. With 1,000 episodes this yields 750 training, 100 validation, 100 final-test, and 50 retention episodes per stage.
+
 The trainer reports two different metrics:
 
-- **Teacher-action accuracy**: how often the policy predicts the teacher's action on held-out observations.
-- **Episode success rate**: whether the model actually navigates a reconstructed held-out symbolic course and emits stop at the goal within the step budget.
+- **Teacher-action accuracy/recall**: how often the policy predicts the teacher's action on labeled observations, with per-action recall exposing rare-action failures.
+- **Episode success rate**: whether the model actually navigates a reconstructed symbolic course and emits stop at the goal within the step budget.
 
-Only episode success rate is used as the stage-mastery score. To unlock the next stage, require at least 90% success over at least 100 held-out episodes. After learning a new stage, previously learned stages must still achieve at least 85% success over at least 50 retention episodes each. Otherwise, repeat training or investigate forgetting/data quality before adding difficulty.
+Checkpoint selection and stage progression use validation episode success, while the final test split is reserved for reporting final results. Before unlocking the next stage, require at least 90% validation success over at least 100 episodes. After learning a new stage, previously learned skills must still achieve at least 85% success over at least 50 separate retention-audit episodes each. Otherwise, repeat training or investigate forgetting/data quality before adding difficulty.
 
 These are grid-world results. The teacher and rollout evaluator share the same symbolic movement rules, so this validates implementation consistency and learning in that simulator, not real Minecraft skill. Actual Bedrock jump distances, collision, momentum, turn timing, special jump abilities, and action delivery must be calibrated against the target game/version. In particular, super jump and double jump require a custom mechanic unless the chosen map/mod already provides one.
 
