@@ -126,7 +126,7 @@ class ParkourTrainingTests(unittest.TestCase):
             path = Path(directory) / "walking.jsonl"
             with path.open("w", encoding="utf-8") as handle:
                 for record in generate_records("walking", 555, 100):
-                    handle.write(json.dumps(record) + "\\n")
+                    handle.write(json.dumps(record) + "\n")
             source = EpisodeFile(path)
             test = EpisodeDataset(source, "test")
             result = evaluate_rollouts(OracleWalkPolicy(), test, torch.device("cpu"))
