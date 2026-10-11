@@ -1,0 +1,35 @@
+name: AIMENG Bedrock Agent Validation
+
+on:
+  push:
+    branches:
+      - feat/minecraft-agent-character
+    paths:
+      - "minecraft/bedrock_aimeng_agent/**"
+      - ".github/workflows/aimeng-bedrock-agent-validation.yml"
+  pull_request:
+    paths:
+      - "minecraft/bedrock_aimeng_agent/**"
+      - ".github/workflows/aimeng-bedrock-agent-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate JSON files
+        run: |
+          node -e "const fs=require('fs'); for(const p of [
+            'minecraft/bedrock_aimeng_agent/behavior_pack/manifest.json',
+            'minecraft/bedrock_aimeng_agent/behavior_pack/entities/parkour_agent.json',
+            'minecraft/bedrock_aimeng_agent/resource_pack/manifest.json',
+            'minecraft/bedrock_aimeng_agent/resource_pack/entity/parkour_agent.entity.json',
+            'minecraft/bedrock_aimeng_agent/resource_pack/models/entity/parkour_agent.geo.json',
+            'minecraft/bedrock_aimeng_agent/resource_pack/render_controllers/parkour_agent.render_controllers.json'
+          ]) { JSON.parse(fs.readFileSync(p,'utf8')); console.log('OK',p); }"
+      - name: Check script syntax
+        run: node --check minecraft/bedrock_aimeng_agent/behavior_pack/scripts/main.js
