@@ -144,11 +144,23 @@ def batches(ids: list[int], context: int, batch_size: int, steps: int, seed: int
         y = torch.tensor([ids[s+context] for s in starts], dtype=torch.long)
         yield x, y
 
+def evaluation_starts(sequence_length: int, context: int, limit: int = 512):
+    """Choose deterministic, evenly spaced next-character targets across the full held-out text."""
+    available = sequence_length - context - 1
+    if available < 1:
+        return []
+    count = min(available, max(1, limit))
+    if count == 1:
+        return [0]
+    last = available - 1
+    return [round(i * last / (count - 1)) for i in range(count)]
+
+
 def evaluate(model, ids, context, limit=512):
     model.eval()
-    if len(ids) <= context + 1:
+    starts = evaluation_starts(len(ids), context, limit)
+    if not starts:
         return float("nan")
-    starts = list(range(min(len(ids)-context-1, limit)))
     total = 0.0
     with torch.no_grad():
         for offset in range(0, len(starts), 64):
