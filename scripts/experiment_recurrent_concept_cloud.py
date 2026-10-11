@@ -147,21 +147,33 @@ class RecurrentConceptCloudNet(nn.Module):
             cycle_token_logits.append(token_logits)
             cycle_active_counts.append(active_mask.sum(dim=-1))
 
-            # Sparse message passing from active source neurons to their graph
-            # neighbors. Inactive neurons do not send messages this cycle.
-            src = state
-            neighbor_ids = self.neighbors
-            messages = self.message(src[:, :, None, :].expand(-1, -1, self.fanout, -1))
-            valid_edges = active_mask[:, :, None].expand(-1, -1, self.fanout)
+            # Sparse message passing: gather only active source neurons before
+            # the learned projection. The previous implementation projected all
+            # neurons and masked most messages afterward, wasting work whenever
+            # active_k << neurons.
+            source_ids = active_mask.nonzero(as_tuple=False)
+            source_batch = source_ids[:, 0]
+            source_neuron = source_ids[:, 1]
+            source_state = state[source_batch, source_neuron]
+            source_neighbors = self.neighbors[source_neuron]
+            messages = self.message(
+                source_state[:, None, :].expand(-1, self.fanout, -1)
+            )
             next_state = torch.zeros_like(state)
-            next_count = torch.zeros(batch, self.neurons, 1, device=context.device, dtype=ctx.dtype)
-            dst = neighbor_ids.unsqueeze(0).expand(batch, -1, -1)
-            offsets = torch.arange(batch, device=context.device)[:, None, None] * self.neurons
-            flat_dst = (dst + offsets).reshape(-1)
-            flat_msg = (messages * valid_edges.unsqueeze(-1)).reshape(-1, self.width)
-            next_state.view(batch * self.neurons, self.width).index_add_(0, flat_dst, flat_msg)
+            next_count = torch.zeros(
+                batch, self.neurons, 1, device=context.device, dtype=ctx.dtype
+            )
+            flat_dst = (
+                source_neighbors + source_batch[:, None] * self.neurons
+            ).reshape(-1)
+            flat_msg = messages.reshape(-1, self.width)
+            next_state.view(batch * self.neurons, self.width).index_add_(
+                0, flat_dst, flat_msg
+            )
             next_count.view(batch * self.neurons, 1).index_add_(
-                0, flat_dst, valid_edges.reshape(-1, 1).to(ctx.dtype)
+                0, flat_dst, torch.ones(
+                    flat_dst.numel(), 1, device=context.device, dtype=ctx.dtype
+                )
             )
             neighbor_state = next_state / next_count.clamp_min(1.0)
             combined = torch.cat([state, neighbor_state], dim=-1)
