@@ -115,9 +115,10 @@ def observe(
         for lz in range(-RADIUS, RADIUS + 1):
             for lx in range(-RADIUS, RADIUS + 1):
                 wx, wz = x + lx, z + lz
+                outside_map = not (0 <= wx < GRID_X and 0 <= wz < GRID_Z)
                 if y == 0:
                     voxels.append(GRASS)
-                elif y in (1, 2) and (wx, wz) in blocked:
+                elif y in (1, 2) and (outside_map or (wx, wz) in blocked):
                     voxels.append(solids.get((wx, wz), STONE))
                 else:
                     voxels.append(AIR)
