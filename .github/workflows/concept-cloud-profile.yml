@@ -1,0 +1,35 @@
+name: Concept cloud inference profile
+
+on:
+  pull_request:
+    paths:
+      - "scripts/profile_recurrent_concept_cloud.py"
+      - "scripts/experiment_recurrent_concept_cloud.py"
+      - ".github/workflows/concept-cloud-profile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Check syntax
+        run: python -m py_compile scripts/profile_recurrent_concept_cloud.py scripts/experiment_recurrent_concept_cloud.py
+      - name: Profile inference operators
+        run: |
+          python scripts/profile_recurrent_concept_cloud.py --batch-size 64 --seq-len 8 --warmup 10 --iterations 30 --threads 1 --cycles 4 | tee concept-cloud-profile.json
+      - name: Upload profile results
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-cloud-inference-profile
+          path: concept-cloud-profile.json
+          if-no-files-found: error
