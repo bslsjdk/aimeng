@@ -24,6 +24,24 @@ Synthetic data can teach geometry and action mapping, but cannot alone prove per
 
 These are practical starting targets to be revised based on learning curves and generation speed. Split by map layout/seed before generating derived windows so near-identical states cannot leak across train and test. Keep validation and test sets fixed.
 
+## First executable generator
+
+A standard-library-only generator is available at `scripts/generate_aimeng_mc_data.py`. It creates seeded 9x5x9 voxel observations, randomized obstacles, a nearby waypoint, and BFS teacher actions. It does not require PyTorch or Minecraft to generate the initial navigation dataset.
+
+Run a quick internal schema/reproducibility check:
+
+```bash
+python scripts/generate_aimeng_mc_data.py --self-test
+```
+
+Generate 1,000 randomized episodes:
+
+```bash
+python scripts/generate_aimeng_mc_data.py --episodes 1000 --seed 12345 --output aimeng_mc_train.jsonl
+```
+
+This first generator teaches **waypoint navigation in a bounded synthetic grid**, not mining, crafting, combat, Minecraft physics, or vision. Its JSONL is a data-generation artifact, not a trained model. Validate the generated records and keep entire map seeds separated between training and evaluation before using the data to train a network.
+
 ## One JSONL record per observation/action step
 
 Store each record as a UTF-8 JSON object on one line. Use stable IDs and explicit missing values. Suggested schema:
