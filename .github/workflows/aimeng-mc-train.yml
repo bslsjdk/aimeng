@@ -7,6 +7,8 @@ on:
       - "scripts/train_aimeng_mc_curriculum.py"
       - "tests/test_aimeng_mc_curriculum.py"
       - "tests/test_train_aimeng_mc_curriculum.py"
+      - "docs/AIMENG_MC_CURRICULUM_TRAINING.md"
+      - "README.md"
       - ".github/workflows/aimeng-mc-train.yml"
   pull_request:
     paths:
