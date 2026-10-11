@@ -12,6 +12,20 @@ from scripts.generate_aimeng_mc_curriculum import (
 
 
 class MinecraftCurriculumTests(unittest.TestCase):
+    def test_walking_stage_varies_heading_and_goal_distance(self):
+        records = list(generate_records("walking", 20261011, 100))
+        starts = {}
+        for record in records:
+            if record["step"] == 0:
+                starts[record["episode_id"]] = (
+                    record["observation"]["yaw_bucket"],
+                    tuple(record["observation"]["goal_offset"]),
+                )
+        headings = {value[0] for value in starts.values()}
+        goal_offsets = {value[1] for value in starts.values()}
+        self.assertEqual(headings, {0, 1, 2, 3})
+        self.assertGreaterEqual(len(goal_offsets), 12)
+
     def test_all_stages_generate_valid_schema_and_repeat_by_seed(self):
         for stage in STAGES:
             first = list(generate_records(stage.name, 900 + stage.index, 2))
