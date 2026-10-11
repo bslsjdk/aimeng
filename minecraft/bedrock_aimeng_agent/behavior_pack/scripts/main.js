@@ -60,6 +60,28 @@ function stop(entity) {
 function tell(player, message) {
   try { player.sendMessage(message); } catch {}
 }
+function startToward(player, goal, label = "goto") {
+  const entity = nearestAgent(player);
+  if (!entity) {
+    tell(player, "§c[AIMENG] No agent within 32 blocks. First run /summon aimeng:parkour_agent ~ ~ ~");
+    return;
+  }
+  agents.set(entity.id, {
+    entityId: entity.id, ownerId: player.id, goal,
+    status: "running", startedAt: system.currentTick,
+    lastReport: system.currentTick, actions: 0, lastAction: label
+  });
+  tell(player, "§a[AIMENG] Going to x=" + goal.x.toFixed(1) + ", y=" + goal.y.toFixed(1) +
+    ", z=" + goal.z.toFixed(1) + ". Current controller is heuristic, not the trained AIMENG network.");
+}
+function parseCoordinate(token, origin) {
+  if (token === undefined || token === "") return NaN;
+  if (token.startsWith("~")) {
+    const tail = token.slice(1);
+    return origin + (tail === "" ? 0 : Number(tail));
+  }
+  return Number(token);
+}
 function begin(player) {
   const entity = nearestAgent(player);
   if (!entity) {
@@ -67,19 +89,37 @@ function begin(player) {
     return;
   }
   const p = entity.location, rot = entity.getRotation(), yaw = rot.y * Math.PI / 180;
-  const goal = {x:p.x - Math.sin(yaw) * 8, y:p.y, z:p.z + Math.cos(yaw) * 8};
-  agents.set(entity.id, {
-    entityId: entity.id, ownerId: player.id, goal,
-    status: "running", startedAt: system.currentTick,
-    lastReport: system.currentTick, actions: 0, lastAction: "start"
-  });
-  tell(player, "§a[AIMENG] Agent controller started. The visible entity moves independently; current policy is heuristic, not the trained network.");
+  startToward(player, {x:p.x - Math.sin(yaw) * 8, y:p.y, z:p.z + Math.cos(yaw) * 8}, "start");
 }
 world.afterEvents.scriptEventReceive.subscribe((event) => {
   if (!event.id.startsWith("aimeng:agent_")) return;
   const player = event.sourceEntity;
   if (!player || player.typeId !== "minecraft:player") return;
   if (event.id === "aimeng:agent_start") { begin(player); return; }
+  if (event.id === "aimeng:agent_goto") {
+    const entity = nearestAgent(player);
+    if (!entity) {
+      tell(player, "§c[AIMENG] No agent within 32 blocks. First run /summon aimeng:parkour_agent ~ ~ ~");
+      return;
+    }
+    const parts = (event.message || "").trim().split(/\\s+/);
+    if (parts.length !== 3 || parts.some(part => part.length === 0)) {
+      tell(player, "§c[AIMENG] Usage: /scriptevent aimeng:agent_goto <x> <y> <z> (coordinates can use ~ or ~offset)");
+      return;
+    }
+    const p = entity.location;
+    const goal = {
+      x: parseCoordinate(parts[0], p.x),
+      y: parseCoordinate(parts[1], p.y),
+      z: parseCoordinate(parts[2], p.z)
+    };
+    if (![goal.x, goal.y, goal.z].every(Number.isFinite)) {
+      tell(player, "§c[AIMENG] Invalid coordinates. Example: /scriptevent aimeng:agent_goto 120 65 -30");
+      return;
+    }
+    startToward(player, goal);
+    return;
+  }
   const entity = nearestAgent(player);
   if (!entity) { tell(player, "§c[AIMENG] No agent within 32 blocks."); return; }
   const state = agents.get(entity.id);
@@ -90,6 +130,7 @@ world.afterEvents.scriptEventReceive.subscribe((event) => {
   } else if (event.id === "aimeng:agent_status") {
     tell(player, state
       ? "[AIMENG] status=" + state.status + ", action=" + state.lastAction +
+        ", goal=(" + state.goal.x.toFixed(1) + "," + state.goal.y.toFixed(1) + "," + state.goal.z.toFixed(1) + ")" +
         ", actions=" + state.actions + ", ticks=" + (system.currentTick - state.startedAt)
       : "[AIMENG] Agent exists but is not running. Use /scriptevent aimeng:agent_start.");
   }
