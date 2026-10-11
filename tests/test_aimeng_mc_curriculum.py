@@ -36,6 +36,25 @@ class MinecraftCurriculumTests(unittest.TestCase):
             self.assertTrue(all(row["teacher_action"]["action"] in ACTIONS for row in first))
             self.assertTrue(all(row["labels"]["at_goal"] == (row["teacher_action"]["action"] == "stop") for row in first))
 
+    def test_turning_and_obstacle_maps_are_not_near_duplicates(self):
+        turning = [r for r in generate_records("turning", 20261012, 100) if r["step"] == 0]
+        obstacles = [r for r in generate_records("obstacle_avoidance", 20261013, 100) if r["step"] == 0]
+        turning_layouts = {
+            (r["observation"]["yaw_bucket"], tuple(r["observation"]["goal_offset"]))
+            for r in turning
+        }
+        obstacle_layouts = {
+            (r["observation"]["yaw_bucket"], tuple(r["observation"]["goal_offset"]), tuple(r["observation"]["voxels"]))
+            for r in obstacles
+        }
+        self.assertGreaterEqual(len(turning_layouts), 50)
+        self.assertEqual({r["observation"]["yaw_bucket"] for r in turning}, {0, 1, 2, 3})
+        self.assertGreaterEqual(len(obstacle_layouts), 50)
+        self.assertTrue(all(
+            any(row["teacher_action"]["action"] in ("turn_left", "turn_right") for row in generate_records(stage_name, 303 + index, 2))
+            for index, stage_name in enumerate(("turning", "obstacle_avoidance"))
+        ))
+
     def test_curriculum_contains_required_jump_mechanic(self):
         for stage in STAGES:
             if not stage.gap_distance:
