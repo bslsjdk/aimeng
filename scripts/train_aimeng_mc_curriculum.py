@@ -606,10 +606,15 @@ def main() -> int:
             new_size = min(old_size * 2, args.max_hidden_size)
             model = model.expand_hidden(new_size, seed=args.seed + epoch + 1)
             optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
-            best_val_episode_success = val_rollout["success_rate"]
-            best_val_accuracy = val_accuracy
-            best_hidden_size = model.hidden_size
-            best_state = clone_state_dict(model)
+            # Widen the best checkpoint as well as the live model. Expansion preserves
+            # old logits, so the previous best policy remains available at the new width.
+            # Do not reset its validation score: doing so can discard a much better
+            # pre-expansion policy merely because the current epoch triggered widening.
+            best_model = ParkourGRUPolicy(old_size, model.encoder_width).to(device)
+            best_model.load_state_dict(best_state)
+            best_model = best_model.expand_hidden(new_size, seed=args.seed + epoch + 1)
+            best_state = clone_state_dict(best_model)
+            best_hidden_size = new_size
             stale_epochs = 0
             expansion_events.append({
                 "epoch": epoch + 1, "from": old_size, "to": new_size,
