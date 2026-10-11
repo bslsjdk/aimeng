@@ -183,7 +183,17 @@ class RecurrentConceptCloudNet(nn.Module):
             # Reactivate a bounded set using context + current multi-cloud belief.
             cloud_belief = torch.softmax(cloud_logits, dim=-1) @ self.cloud_embedding
             routed_context = self.context_seed(ctx + cloud_belief)
-            neuron_scores = (self.neuron_base.unsqueeze(0) * routed_context.unsqueeze(1)).sum(dim=-1)
+            # Re-select neurons using both their learned prior affinity and the
+            # state they currently carry. Without the state term, each cycle's
+            # active set is mostly re-derived from static context and can discard
+            # useful recurrent information after message passing.
+            context_affinity = (
+                self.neuron_base.unsqueeze(0) * routed_context.unsqueeze(1)
+            ).sum(dim=-1)
+            recurrent_affinity = (
+                revised * routed_context.unsqueeze(1)
+            ).sum(dim=-1) / math.sqrt(self.width)
+            neuron_scores = context_affinity + recurrent_affinity
             next_ids = neuron_scores.topk(self.active_k, dim=-1).indices
             next_mask = torch.zeros_like(active_mask)
             next_mask.scatter_(1, next_ids, True)
