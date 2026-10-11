@@ -38,9 +38,11 @@ python scripts/benchmark_recurrent_reasoning.py --steps 300 --train-size 2048 --
 
 For every seed, the script trains separate concept-cloud models with 1, 2, 3,
 and 4 cycles and a GRU baseline on the same training examples, using the same
-embedding width, optimizer, and number of update steps. It reports held-out
-accuracy, router recall, throughput, parameter count, training loss movement,
-and wall-clock training time as JSON.
+embedding width, optimizer, and number of update steps. Training uses the
+configured sequence length only. Evaluation reports both held-out examples at
+the training length and extrapolation to sequences 4 and 8 tokens longer, with
+no further training. It also reports router recall, throughput, parameter
+count, training loss movement, and wall-clock training time as JSON.
 
 ## Interpretation rules
 
