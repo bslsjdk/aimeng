@@ -307,7 +307,8 @@ def generate_from_checkpoint(checkpoint_path: str, prompt: str, count: int, temp
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--text", type=str, default=None, help="UTF-8 training corpus; omitted means synthetic smoke data only")\n    p.add_argument("--validation-text", type=str, default=None, help="Optional independent UTF-8 validation corpus; exact blank-line records shared with training are rejected")
+    p.add_argument("--text", type=str, default=None, help="UTF-8 training corpus; omitted means synthetic smoke data only")
+    p.add_argument("--validation-text", type=str, default=None, help="Optional independent UTF-8 validation corpus; exact blank-line records shared with training are rejected")
     p.add_argument("--checkpoint", type=str, default=None, help="load a checkpoint for terminal-only text generation")
     p.add_argument("--prompt", type=str, default="", help="prompt used with --checkpoint")
     p.add_argument("--generate-tokens", type=int, default=120, help="characters to generate with --checkpoint")
