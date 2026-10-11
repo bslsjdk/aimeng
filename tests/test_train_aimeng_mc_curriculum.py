@@ -10,12 +10,30 @@ from scripts.train_aimeng_mc_curriculum import (
     EpisodeDataset,
     EpisodeFile,
     ParkourGRUPolicy,
+    allowed_actions_for_stage,
     collate_episodes,
     evaluate_rollouts,
 )
 
 
 class ParkourTrainingTests(unittest.TestCase):
+    def test_action_space_unlocks_by_curriculum_stage(self):
+        walking = set(allowed_actions_for_stage("walking"))
+        turning = set(allowed_actions_for_stage("turning"))
+        small_jump = set(allowed_actions_for_stage("small_jump"))
+        rotating = set(allowed_actions_for_stage("rotating_jump"))
+        double_jump = set(allowed_actions_for_stage("double_jump"))
+        self.assertEqual(walking, {"walk_forward", "stop"})
+        self.assertTrue({"turn_left", "turn_right"}.issubset(turning))
+        self.assertNotIn("jump_forward", turning)
+        self.assertIn("jump_forward", small_jump)
+        self.assertIn("rotating_jump_left", rotating)
+        self.assertIn("double_jump_forward", double_jump)
+        self.assertTrue(walking.issubset(turning))
+        self.assertTrue(turning.issubset(small_jump))
+        self.assertTrue(small_jump.issubset(rotating))
+        self.assertTrue(rotating.issubset(double_jump))
+
     def test_model_forward_shapes(self):
         model = ParkourGRUPolicy(hidden_size=8, encoder_width=16)
         voxels = torch.zeros((2, 3, 405), dtype=torch.long)
