@@ -114,7 +114,7 @@ class RecurrentConceptCloudNet(nn.Module):
         cycle_token_logits = []
         cycle_active_counts = []
 
-        for _ in range(n_cycles):
+        for cycle_index in range(n_cycles):
             # Multi-hypothesis prediction: keep several clouds alive at once.
             pooled = state.sum(dim=1) / active_mask.sum(dim=1, keepdim=True).clamp_min(1)
             cloud_logits = self.cloud_head(pooled + ctx)
@@ -151,7 +151,7 @@ class RecurrentConceptCloudNet(nn.Module):
             # the correct expert without changing the route-free logits used
             # for prediction/evaluation. This is a loss-only branch: the gold
             # cloud is never inserted into candidate_ids or token_logits.
-            if target is not None:
+            if target is not None and cycle_index == n_cycles - 1:
                 oracle_cloud = self.token_cloud[target]
                 oracle_ids = self.cloud_members[oracle_cloud]
                 oracle_valid = oracle_ids >= 0
