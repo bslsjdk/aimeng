@@ -11,12 +11,25 @@ from scripts.train_aimeng_mc_curriculum import (
     EpisodeFile,
     ParkourGRUPolicy,
     allowed_actions_for_stage,
+    compute_class_weights,
     collate_episodes,
     evaluate_rollouts,
 )
 
 
 class ParkourTrainingTests(unittest.TestCase):
+    def test_inverse_frequency_weights_balance_rare_stop_action(self):
+        from collections import Counter
+        from types import SimpleNamespace
+
+        source = SimpleNamespace(action_counts={
+            "train": Counter({"walk_forward": 90, "stop": 10})
+        })
+        weights = compute_class_weights([source], torch.device("cpu"))
+        self.assertAlmostEqual(float(weights[1].item() / weights[0].item()), 9.0, places=5)
+        self.assertAlmostEqual(float(weights[0].item() * 90 + weights[1].item() * 10) / 100, 1.0, places=5)
+        self.assertEqual(float(weights[2].item()), 1.0)
+
     def test_action_space_unlocks_by_curriculum_stage(self):
         walking = set(allowed_actions_for_stage("walking"))
         turning = set(allowed_actions_for_stage("turning"))
