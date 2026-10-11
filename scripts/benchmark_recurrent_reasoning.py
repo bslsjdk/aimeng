@@ -113,6 +113,11 @@ def evaluate_gru(model, x, y, batch_size: int):
     return {"accuracy": correct / max(count, 1), "examples_per_second": count / elapsed}
 
 
+def gru_parameter_count(vocab: int, width: int) -> int:
+    # Embedding + one-layer GRU (two bias vectors) + vocabulary projection.
+    return vocab * width + 6 * width * width + 6 * width + vocab * width + vocab
+
+
 def run_seed(args, seed: int, device: str):
     train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, seed, device)
     test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, seed + 100_003, device)
@@ -152,15 +157,37 @@ def run_seed(args, seed: int, device: str):
     baseline_train = train(
         baseline, train_x, train_y, args.steps, args.batch_size, seed, cloud=False
     )
+    cloud_parameter_count = next(iter(cycle_results.values()))["parameters"]
+    matched_width = min(
+        range(max(4, args.width // 2), max(args.width * 3, 32) + 1),
+        key=lambda width: (abs(gru_parameter_count(args.vocab, width) - cloud_parameter_count), width),
+    )
+    torch.manual_seed(seed)
+    matched_gru = GRUBaseline(args.vocab, matched_width).to(device)
+    matched_gru_train = train(
+        matched_gru, train_x, train_y, args.steps, args.batch_size, seed, cloud=False
+    )
     return {
         "seed": seed,
         "concept_cloud_by_cycles": cycle_results,
-        "gru": {
+        "gru_same_width": {
             "parameters": sum(p.numel() for p in baseline.parameters()),
+            "width": args.width,
             "train": baseline_train,
             "test_same_length": evaluate_gru(baseline, test_x, test_y, args.batch_size),
             "test_longer_sequences": {
                 length: evaluate_gru(baseline, lx, ly, args.batch_size)
+                for length, (lx, ly) in long_tests.items()
+            },
+        },
+        "gru_parameter_matched": {
+            "parameters": sum(p.numel() for p in matched_gru.parameters()),
+            "width": matched_width,
+            "parameter_difference_vs_concept_cloud": sum(p.numel() for p in matched_gru.parameters()) - cloud_parameter_count,
+            "train": matched_gru_train,
+            "test_same_length": evaluate_gru(matched_gru, test_x, test_y, args.batch_size),
+            "test_longer_sequences": {
+                length: evaluate_gru(matched_gru, lx, ly, args.batch_size)
                 for length, (lx, ly) in long_tests.items()
             },
         },
@@ -213,6 +240,7 @@ def main():
         "rule": "state=0; for each token: state=(3*state+token+1)%vocab",
         "warning": "Synthetic compositional task only; not proof of natural-language reasoning.",
         "generalization_protocol": "Train at configured seq_len; evaluate on same length and seq_len+4/seq_len+8 without further training.",
+        "comparison_protocol": "Includes same-width GRU and a GRU width chosen to minimize parameter-count difference from the concept-cloud model; training steps are equal but FLOPs are not guaranteed equal.",
         "config": vars(args) | {"device_resolved": device, "seeds_used": seeds},
         "runs": [],
     }
