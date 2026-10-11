@@ -55,6 +55,18 @@ def allowed_actions_for_stage(stage_name: str) -> tuple[str, ...]:
     return tuple(allowed)
 
 
+def mask_action_logits(logits: Tensor, stage_name: str) -> Tensor:
+    """Prevent locked future-stage actions from competing during training or evaluation."""
+    allowed_ids = {ACTION_TO_ID[name] for name in allowed_actions_for_stage(stage_name)}
+    if len(allowed_ids) == len(ACTIONS):
+        return logits
+    masked = logits.clone()
+    for action_id in range(len(ACTIONS)):
+        if action_id not in allowed_ids:
+            masked[..., action_id] = float("-inf")
+    return masked
+
+
 class EpisodeFile:
     """Byte-offset index for JSONL episodes; keeps only per-episode metadata in RAM."""
 
@@ -265,6 +277,7 @@ def compute_class_weights(sources: list[EpisodeFile], device: torch.device) -> T
 def evaluate_action_accuracy(
     model: ParkourGRUPolicy, loader: DataLoader, device: torch.device,
     class_weights: Tensor | None = None,
+    stage_name: str | None = None,
 ) -> tuple[float, float, int, dict[str, float]]:
     model.eval()
     correct_total = count_total = 0
@@ -275,6 +288,8 @@ def evaluate_action_accuracy(
         for batch in loader:
             batch = move_batch(batch, device)
             logits, _ = model(batch["voxels"], batch["goals"], batch["yaws"])
+            if stage_name is not None:
+                logits = mask_action_logits(logits, stage_name)
             targets = batch["actions"]
             mask = targets != PAD_ACTION
             correct, count = accuracy_counts(logits, targets)
@@ -310,7 +325,7 @@ def evaluate_action_accuracy(
 
 def train_one_epoch(
     model: ParkourGRUPolicy, loader: DataLoader, optimizer: torch.optim.Optimizer,
-    device: torch.device, class_weights: Tensor,
+    device: torch.device, class_weights: Tensor, stage_name: str,
 ) -> tuple[float, float]:
     model.train()
     loss_total = loss_denominator = 0.0
@@ -319,6 +334,7 @@ def train_one_epoch(
         batch = move_batch(batch, device)
         optimizer.zero_grad(set_to_none=True)
         logits, _ = model(batch["voxels"], batch["goals"], batch["yaws"])
+        logits = mask_action_logits(logits, stage_name)
         targets = batch["actions"]
         mask = targets != PAD_ACTION
         if not mask.any():
@@ -372,11 +388,7 @@ def evaluate_rollouts(
                 goals = torch.tensor(observation["goal_offset"], dtype=torch.float32, device=device).view(1, 1, 3)
                 yaws = torch.tensor([[yaw]], dtype=torch.long, device=device)
                 logits, hidden = model(voxels, goals, yaws, hidden)
-                masked_logits = logits[0, 0].clone()
-                allowed_ids = {ACTION_TO_ID[name] for name in allowed_actions_for_stage(stage.name)}
-                for action_id in range(len(ACTIONS)):
-                    if action_id not in allowed_ids:
-                        masked_logits[action_id] = float("-inf")
+                masked_logits = mask_action_logits(logits[0, 0], stage.name)
                 action = ACTIONS[int(masked_logits.argmax().item())]
                 if action == "stop":
                     solved = state[:2] == goal
@@ -508,13 +520,13 @@ def main() -> int:
     expansion_events = []
     for epoch in range(args.epochs):
         train_loss, combined_train_accuracy = train_one_epoch(
-            model, train_loader, optimizer, device, class_weights
+            model, train_loader, optimizer, device, class_weights, stage.name
         )
         current_train_loss, current_train_accuracy, current_train_count, current_train_recalls = evaluate_action_accuracy(
-            model, current_train_eval_loader, device, class_weights
+            model, current_train_eval_loader, device, class_weights, stage.name
         )
         val_loss, val_accuracy, val_count, val_recalls = evaluate_action_accuracy(
-            model, val_loader, device, class_weights
+            model, val_loader, device, class_weights, stage.name
         )
         current_train_macro_recall = sum(current_train_recalls.values()) / max(1, len(current_train_recalls))
         val_macro_recall = sum(val_recalls.values()) / max(1, len(val_recalls))
@@ -578,16 +590,16 @@ def main() -> int:
         raise RuntimeError("best checkpoint hidden size does not match final model")
     model.load_state_dict(best_state)
     train_loss, combined_train_accuracy, train_steps, combined_train_recalls = evaluate_action_accuracy(
-        model, train_eval_loader, device, class_weights
+        model, train_eval_loader, device, class_weights, stage.name
     )
     current_train_loss, current_train_accuracy, current_train_steps, current_train_recalls = evaluate_action_accuracy(
-        model, current_train_eval_loader, device, class_weights
+        model, current_train_eval_loader, device, class_weights, stage.name
     )
     val_loss, val_accuracy, val_steps, val_recalls = evaluate_action_accuracy(
-        model, val_loader, device, class_weights
+        model, val_loader, device, class_weights, stage.name
     )
     test_loss, test_accuracy, test_steps, test_recalls = evaluate_action_accuracy(
-        model, test_loader, device, class_weights
+        model, test_loader, device, class_weights, stage.name
     )
     current_validation_rollout = evaluate_rollouts(model, val_dataset, device)
     current_rollout = evaluate_rollouts(model, test_dataset, device)
