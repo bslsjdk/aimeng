@@ -1,0 +1,33 @@
+name: Recurrent reasoning benchmark smoke test
+
+on:
+  pull_request:
+    paths:
+      - "scripts/benchmark_recurrent_reasoning.py"
+      - "scripts/experiment_recurrent_concept_cloud.py"
+      - "tests/test_concept_cloud.py"
+      - "tests/test_recurrent_concept_cloud.py"
+      - ".github/workflows/recurrent-reasoning-benchmark.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install PyTorch
+        run: python -m pip install --upgrade pip torch
+      - name: Check Python syntax
+        run: python -m py_compile scripts/benchmark_recurrent_reasoning.py scripts/experiment_recurrent_concept_cloud.py
+      - name: Run multi-hop benchmark self-test
+        run: python scripts/benchmark_recurrent_reasoning.py --self-test
+      - name: Run concept-cloud unit tests
+        run: python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
