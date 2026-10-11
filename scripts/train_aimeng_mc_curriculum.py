@@ -253,9 +253,10 @@ def compute_class_weights(sources: list[EpisodeFile], device: torch.device) -> T
     weights = torch.ones_like(values)
     if present.any():
         mean_count = values[present].mean()
-        # Inverse-square-root frequency reduces the walk/stop imbalance without letting
-        # a rare action dominate the full loss. Actions absent in this stage remain weight 1.
-        weights[present] = torch.sqrt(mean_count / values[present])
+        # Inverse frequency gives every action present in this stage comparable total
+        # training weight. This is deliberate for stop/jump/turn decisions that are rare but
+        # essential for completing a route. Actions absent in this stage remain weight 1.
+        weights[present] = mean_count / values[present]
         weighted_mean = (weights[present] * values[present]).sum() / values[present].sum()
         weights[present] /= weighted_mean.clamp_min(1e-8)
     return weights
@@ -515,6 +516,8 @@ def main() -> int:
         val_loss, val_accuracy, val_count, val_recalls = evaluate_action_accuracy(
             model, val_loader, device, class_weights
         )
+        current_train_macro_recall = sum(current_train_recalls.values()) / max(1, len(current_train_recalls))
+        val_macro_recall = sum(val_recalls.values()) / max(1, len(val_recalls))
         val_rollout = evaluate_rollouts(model, val_dataset, device)
         improved = (
             val_rollout["success_rate"] > best_val_episode_success + 1e-9
@@ -536,9 +539,11 @@ def main() -> int:
             "current_stage_train_action_accuracy": current_train_accuracy,
             "current_stage_train_steps": current_train_count,
             "current_stage_train_action_recall": current_train_recalls,
+            "current_stage_train_macro_recall": current_train_macro_recall,
             "validation_loss": val_loss,
             "validation_action_accuracy": val_accuracy, "validation_steps": val_count,
             "validation_action_recall": val_recalls,
+            "validation_macro_recall": val_macro_recall,
             "validation_episode_success_rate": val_rollout["success_rate"],
             "validation_episode_successes": val_rollout["successes"],
             "validation_rollout_episodes": val_rollout["episodes"],
@@ -550,8 +555,8 @@ def main() -> int:
             args.auto_expand and epoch < args.epochs - 1
             and model.hidden_size < args.max_hidden_size
             and stale_epochs >= args.expand_patience
-            and current_train_accuracy < 0.95 and val_accuracy < 0.90
-            and abs(current_train_accuracy - val_accuracy) <= 0.10
+            and current_train_macro_recall < 0.95 and val_macro_recall < 0.90
+            and abs(current_train_macro_recall - val_macro_recall) <= 0.10
         )
         if can_expand:
             old_size = model.hidden_size
