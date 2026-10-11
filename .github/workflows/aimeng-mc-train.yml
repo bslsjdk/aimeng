@@ -1,0 +1,168 @@
+name: AIMENG-MC curriculum training
+
+on:
+  push:
+    paths:
+      - "scripts/generate_aimeng_mc_curriculum.py"
+      - "scripts/train_aimeng_mc_curriculum.py"
+      - "tests/test_aimeng_mc_curriculum.py"
+      - "tests/test_train_aimeng_mc_curriculum.py"
+      - ".github/workflows/aimeng-mc-train.yml"
+  pull_request:
+    paths:
+      - "scripts/generate_aimeng_mc_curriculum.py"
+      - "scripts/train_aimeng_mc_curriculum.py"
+      - "tests/test_aimeng_mc_curriculum.py"
+      - "tests/test_train_aimeng_mc_curriculum.py"
+      - ".github/workflows/aimeng-mc-train.yml"
+  workflow_dispatch:
+    inputs:
+      max_stage:
+        description: "Train from walking upward, stopping at this highest requested stage"
+        type: choice
+        options:
+          - walking
+          - turning
+          - obstacle_avoidance
+          - small_jump
+          - gap_jump
+          - rotating_jump
+          - super_jump
+          - double_jump
+        default: walking
+        required: true
+      episodes:
+        description: "Random episodes generated per stage; 1000 gives 100 test episodes"
+        type: number
+        default: 1000
+        required: true
+      epochs:
+        description: "Training epochs per stage"
+        type: number
+        default: 5
+        required: true
+      hidden_size:
+        description: "Initial recurrent hidden units"
+        type: number
+        default: 1024
+        required: true
+      max_hidden_size:
+        description: "Largest hidden size allowed during automatic expansion"
+        type: number
+        default: 2048
+        required: true
+      auto_expand:
+        description: "Allow expansion after persistent underfitting and a small generalization gap"
+        type: boolean
+        default: true
+        required: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Check Python syntax
+        run: |
+          python -m py_compile scripts/generate_aimeng_mc_curriculum.py
+          python -m py_compile scripts/train_aimeng_mc_curriculum.py
+      - name: Test curriculum generator and progression gate
+        run: python -m unittest tests.test_aimeng_mc_curriculum -v
+      - name: Test recurrent trainer and expansion
+        run: python -m unittest tests.test_train_aimeng_mc_curriculum -v
+      - name: Run curriculum self-test
+        run: python scripts/generate_aimeng_mc_curriculum.py --self-test
+      - name: Smoke-train the walking stage
+        run: |
+          mkdir -p /tmp/aimeng-mc-smoke
+          python scripts/generate_aimeng_mc_curriculum.py --stage walking --episodes 20 --seed 4242 --output /tmp/aimeng-mc-smoke/walking.jsonl
+          python scripts/train_aimeng_mc_curriculum.py --stage walking --data /tmp/aimeng-mc-smoke/walking.jsonl --epochs 2 --batch-size 4 --hidden-size 16 --max-hidden-size 16 --seed 4242 --output /tmp/aimeng-mc-smoke/walking.pt --report /tmp/aimeng-mc-smoke/walking.metrics.json --threads 1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("/tmp/aimeng-mc-smoke")
+          report = json.loads((root / "walking.metrics.json").read_text())
+          assert (root / "walking.pt").is_file()
+          assert report["stage"] == "walking"
+          assert report["test_episode_count"] == 2
+          assert 0.0 <= report["test_episode_success_rate"] <= 1.0
+          print("validated checkpoint and held-out rollout report")
+          PY
+
+  train-curriculum:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      MAX_STAGE: ${{ inputs.max_stage }}
+      EPISODES: ${{ inputs.episodes }}
+      EPOCHS: ${{ inputs.epochs }}
+      HIDDEN_SIZE: ${{ inputs.hidden_size }}
+      MAX_HIDDEN_SIZE: ${{ inputs.max_hidden_size }}
+      AUTO_EXPAND: ${{ inputs.auto_expand }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Train stages in order with replay and evidence-based gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if (( EPISODES < 100 )); then
+            echo "Use at least 100 episodes per stage; 1000 is recommended to get 100 held-out test episodes."
+            exit 2
+          fi
+          if (( EPOCHS < 1 || HIDDEN_SIZE < 1 || MAX_HIDDEN_SIZE < HIDDEN_SIZE )); then
+            echo "Invalid training configuration."
+            exit 2
+          fi
+          STAGES=(walking turning obstacle_avoidance small_jump gap_jump rotating_jump super_jump double_jump)
+          TARGET_INDEX=-1
+          for i in "${!STAGES[@]}"; do
+            if [[ "${STAGES[$i]}" == "$MAX_STAGE" ]]; then TARGET_INDEX=$i; break; fi
+          done
+          if (( TARGET_INDEX < 0 )); then echo "Unknown target stage: $MAX_STAGE"; exit 2; fi
+          mkdir -p data checkpoints reports
+          BASE_SEED=20261011
+          for ((i=0; i<=TARGET_INDEX; i++)); do
+            stage="${STAGES[$i]}"
+            echo "=== Curriculum stage $((i+1))/${#STAGES[@]}: $stage ==="
+            python scripts/generate_aimeng_mc_curriculum.py --stage "$stage" --episodes "$EPISODES" --seed "$((BASE_SEED + i * 100003))" --output "data/$stage.jsonl"
+            args=(--stage "$stage" --data "data/$stage.jsonl" --output "checkpoints/$stage.pt" --report "reports/$stage.json" --epochs "$EPOCHS" --batch-size 16 --hidden-size "$HIDDEN_SIZE" --max-hidden-size "$MAX_HIDDEN_SIZE" --seed "$((BASE_SEED + i * 100003))" --device cpu --threads 2)
+            if (( i > 0 )); then
+              previous="${STAGES[$((i-1))]}"
+              args+=(--resume "checkpoints/$previous.pt" --prior-report "reports/$previous.json")
+              for ((j=0; j<i; j++)); do args+=(--replay-data "data/${STAGES[$j]}.jsonl"); done
+            fi
+            if [[ "$AUTO_EXPAND" == "true" ]]; then args+=(--auto-expand); fi
+            python scripts/train_aimeng_mc_curriculum.py "${args[@]}"
+            python scripts/generate_aimeng_mc_curriculum.py --metrics "reports/$stage.json" > "reports/$stage.gate.json"
+            cat "reports/$stage.gate.json"
+            if (( i < TARGET_INDEX )); then
+              next="${STAGES[$((i+1))]}"
+              recommendation=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["recommended_stage"] or "")' "reports/$stage.gate.json")
+              decision=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["decision"])' "reports/$stage.gate.json")
+              if [[ "$recommendation" != "$next" || "$decision" != "collect_more_evaluation" ]]; then
+                echo "Progression gate declined to unlock $next. Stop here, inspect metrics, and repeat the current stage."
+                break
+              fi
+            fi
+          done
+      - name: Upload checkpoints and measured curriculum reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aimeng-mc-curriculum-results
+          path: |
+            checkpoints/
+            reports/
+          if-no-files-found: warn
+          retention-days: 30
