@@ -110,7 +110,6 @@ class CapacityMonitor:
         self.target_score = target_score
         self.max_generalization_gap = max_generalization_gap
         self.min_delta = min_delta
-        self._best_train = float("-inf")
         self._best_val = float("-inf")
         self._stale = 0
 
@@ -119,22 +118,26 @@ class CapacityMonitor:
             raise ValueError("current_size must be positive")
         if not (0.0 <= train_score <= 1.0 and 0.0 <= val_score <= 1.0):
             raise ValueError("scores must be in [0, 1]")
-        improved = train_score > self._best_train + self.min_delta
+        # Plateau is measured on held-out validation performance, not training fit.
+        improved = val_score > self._best_val + self.min_delta
         if improved:
-            self._best_train = train_score
-            self._best_val = max(self._best_val, val_score)
+            self._best_val = val_score
             self._stale = 0
         else:
             self._stale += 1
 
         gap = train_score - val_score
         if val_score >= self.target_score:
-            return CapacityDecision(False, "target reached; keep current size", current_size)
+            return CapacityDecision(False, "validation target reached; keep current size", current_size)
+        if train_score >= self.target_score:
+            return CapacityDecision(
+                False, "training target reached; investigate generalization/data before widening", current_size
+            )
         if gap > self.max_generalization_gap:
             return CapacityDecision(
                 False, "generalization gap is too large; improve data/regularization first", current_size
             )
         if self._stale < self.patience:
-            return CapacityDecision(False, "not enough plateau evidence", current_size)
+            return CapacityDecision(False, "validation has not plateaued long enough", current_size)
         # Grow gradually; never jump directly from a tiny network to a huge one.
         return CapacityDecision(True, "persistent underfit with small train/validation gap", current_size * 2)
