@@ -59,6 +59,7 @@ class ExpandableGRUTests(unittest.TestCase):
         monitor = CapacityMonitor(patience=2, target_score=0.95)
         self.assertFalse(monitor.update(0.70, 0.68, 64).expand)
         self.assertFalse(monitor.update(0.70, 0.69, 64).expand)
+        self.assertFalse(monitor.update(0.70, 0.69, 64).expand)
         decision = monitor.update(0.70, 0.69, 64)
         self.assertTrue(decision.expand)
         self.assertEqual(decision.suggested_size, 128)
