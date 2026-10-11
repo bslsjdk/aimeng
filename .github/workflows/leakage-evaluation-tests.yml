@@ -4,7 +4,7 @@ on:
   push:
     branches: [feat/leakage-resistant-evaluation]
   pull_request:
-    branches: [feat/sparse-diffusion-text-trainer]
+    branches: [main]
 
 jobs:
   unit-tests:
