@@ -23,8 +23,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyTorch
-        run: python -m pip install --upgrade pip torch
+      - name: Install CPU-only PyTorch
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Check Python syntax
         run: python -m py_compile scripts/benchmark_recurrent_reasoning.py scripts/experiment_recurrent_concept_cloud.py
       - name: Run multi-hop benchmark self-test
