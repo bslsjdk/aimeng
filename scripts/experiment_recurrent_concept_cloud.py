@@ -126,17 +126,28 @@ class RecurrentConceptCloudNet(nn.Module):
                 (batch, self.vocab_size), torch.finfo(ctx.dtype).min,
                 device=context.device, dtype=ctx.dtype,
             )
-            for b in range(batch):
-                chosen = candidate_ids[b]
-                if target is not None:
-                    # Teacher-force the gold cloud into token scoring during training;
-                    # router recall is measured separately from its own top-k guesses.
-                    chosen = torch.cat([chosen, self.token_cloud[target[b]].view(1)])
-                chosen = chosen.unique()
-                token_ids = torch.cat([self.cloud_members[c][self.cloud_members[c] >= 0] for c in chosen])
-                token_ids = token_ids.unique()
-                scores = self.embedding(token_ids) @ (self.cloud_query(pooled[b] + ctx[b])) / math.sqrt(self.width)
-                token_logits[b, token_ids] = scores + self.token_bias[token_ids]
+            # Vectorized candidate scoring avoids a Python loop over examples.
+            # The dense output tensor is retained for compatibility, but only
+            # tokens belonging to the selected clouds receive real scores.
+            scoring_clouds = candidate_ids
+            if target is not None:
+                # Teacher-force the gold cloud into token scoring during training;
+                # router recall is measured separately from its own top-k guesses.
+                scoring_clouds = torch.cat(
+                    [candidate_ids, self.token_cloud[target].unsqueeze(1)], dim=1
+                )
+            token_ids = self.cloud_members[scoring_clouds]  # [batch, clouds, members]
+            valid_tokens = token_ids >= 0
+            safe_ids = token_ids.clamp_min(0)
+            token_vectors = self.embedding(safe_ids)
+            query = self.cloud_query(pooled + ctx) / math.sqrt(self.width)
+            scores = torch.einsum("bcmw,bw->bcm", token_vectors, query)
+            scores = scores + self.token_bias[safe_ids]
+            scores = scores.masked_fill(~valid_tokens, torch.finfo(ctx.dtype).min)
+            token_logits.scatter_reduce_(
+                1, safe_ids.reshape(batch, -1), scores.reshape(batch, -1),
+                reduce="amax", include_self=True,
+            )
             cycle_token_logits.append(token_logits)
             cycle_active_counts.append(active_mask.sum(dim=-1))
 
