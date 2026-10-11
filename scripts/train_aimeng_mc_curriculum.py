@@ -32,6 +32,7 @@ ACTION_TO_ID = {name: i for i, name in enumerate(ACTIONS)}
 PAD_ACTION = -100
 VOXEL_COUNT = GRID_X * GRID_Y * GRID_Z
 EMBED_DIM = 8
+STATIC_FEATURE_SIZE = 11
 ENCODER_WIDTH = 128
 MAX_ROLLOUT_STEPS = 64
 
@@ -181,10 +182,12 @@ class ParkourGRUPolicy(nn.Module):
         self.hidden_size = hidden_size
         self.encoder_width = encoder_width
         self.block_embedding = nn.Embedding(len(BLOCK_NAMES), EMBED_DIM)
-        feature_size = VOXEL_COUNT * EMBED_DIM + 3 + 4
+        feature_size = VOXEL_COUNT * EMBED_DIM + STATIC_FEATURE_SIZE
         self.encoder = nn.Sequential(nn.Linear(feature_size, encoder_width), nn.ReLU())
         self.cell = nn.GRUCell(encoder_width, hidden_size)
-        self.readout = nn.Linear(hidden_size, len(ACTIONS))
+        # Direct geometry skip: the recurrent state models history, while the action head can
+        # still read goal distance/alignment without forcing it through the recurrent state.
+        self.readout = nn.Linear(hidden_size + STATIC_FEATURE_SIZE, len(ACTIONS))
 
     def forward(
         self, voxels: Tensor, goals: Tensor, yaws: Tensor, hidden: Tensor | None = None,
@@ -205,12 +208,27 @@ class ParkourGRUPolicy(nn.Module):
         embedded = self.block_embedding(voxels).flatten(start_dim=2)
         normalized_goals = goals / float(WORLD_SIZE // 2)
         yaw_features = F.one_hot(yaws.clamp(min=0, max=3), num_classes=4).to(embedded.dtype)
-        features = torch.cat([embedded, normalized_goals.to(embedded.dtype), yaw_features], dim=-1)
+        dx = normalized_goals[..., 0]
+        dz = normalized_goals[..., 2]
+        forward_x = yaw_features[..., 1] - yaw_features[..., 3]
+        forward_z = yaw_features[..., 2] - yaw_features[..., 0]
+        right_x = yaw_features[..., 0] - yaw_features[..., 2]
+        right_z = yaw_features[..., 1] - yaw_features[..., 3]
+        forward_delta = (dx * forward_x + dz * forward_z).unsqueeze(-1)
+        lateral_delta = (dx * right_x + dz * right_z).unsqueeze(-1)
+        manhattan_distance = (dx.abs() + dz.abs()).unsqueeze(-1)
+        at_goal = ((dx == 0) & (dz == 0)).to(embedded.dtype).unsqueeze(-1)
+        static_features = torch.cat([
+            normalized_goals.to(embedded.dtype), yaw_features,
+            forward_delta, lateral_delta, manhattan_distance, at_goal,
+        ], dim=-1)
+        features = torch.cat([embedded, static_features], dim=-1)
         encoded = self.encoder(features)
         logits = []
         for step in range(steps):
             hidden = self.cell(encoded[:, step, :], hidden)
-            logits.append(self.readout(hidden))
+            readout_input = torch.cat([hidden, static_features[:, step, :]], dim=-1)
+            logits.append(self.readout(readout_input))
         if not logits:
             return voxels.new_empty((batch, 0, len(ACTIONS)), dtype=torch.float32), hidden
         return torch.stack(logits, dim=1), hidden
@@ -238,8 +256,12 @@ class ParkourGRUPolicy(nn.Module):
                 widened.cell.weight_hh[new_rows, old_size:].zero_()
                 widened.cell.bias_ih[new_rows].copy_(self.cell.bias_ih[old_rows])
                 widened.cell.bias_hh[new_rows].copy_(self.cell.bias_hh[old_rows])
-            widened.readout.weight[:, :old_size].copy_(self.readout.weight)
-            widened.readout.weight[:, old_size:].zero_()
+            # Columns are [recurrent hidden state, static geometry features]. Preserve the
+            # old hidden contributions, initialize newly added hidden contributions to zero,
+            # and copy static-feature columns to their shifted positions.
+            widened.readout.weight[:, :old_size].copy_(self.readout.weight[:, :old_size])
+            widened.readout.weight[:, old_size:new_size].zero_()
+            widened.readout.weight[:, new_size:].copy_(self.readout.weight[:, old_size:])
             widened.readout.bias.copy_(self.readout.bias)
         return widened
 
@@ -424,7 +446,7 @@ def main() -> int:
     parser.add_argument("--max-hidden-size", type=int, default=2048)
     parser.add_argument("--expand-patience", type=int, default=3)
     parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument("--learning-rate", type=float, default=0.001)
+    parser.add_argument("--learning-rate", type=float, default=0.0003)
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=1)
     args = parser.parse_args()
@@ -495,7 +517,7 @@ def main() -> int:
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location=device)
-        if checkpoint.get("format") != "aimeng-mc-curriculum-checkpoint-v1":
+        if checkpoint.get("format") != "aimeng-mc-curriculum-checkpoint-v2":
             parser.error("unsupported checkpoint format")
         if checkpoint.get("action_vocab") != list(ACTIONS):
             parser.error("checkpoint action vocabulary does not match this code version")
@@ -664,7 +686,7 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     torch.save({
-        "format": "aimeng-mc-curriculum-checkpoint-v1",
+        "format": "aimeng-mc-curriculum-checkpoint-v2",
         "stage": stage.name,
         "hidden_size": model.hidden_size,
         "encoder_width": model.encoder_width,
