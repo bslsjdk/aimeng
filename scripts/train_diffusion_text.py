@@ -185,10 +185,10 @@ def process_memory_mib():
 
 def split_train_validation(source: str, validation_fraction: float = 0.1):
     """Split at blank-line record boundaries when possible; never split a record mid-example."""
-    records = [part.strip() for part in source.strip().split("\\n\\n") if part.strip()]
+    records = [part.strip() for part in source.strip().split("\n\n") if part.strip()]
     if len(records) >= 5:
         cut = max(1, min(len(records) - 1, int(len(records) * (1.0 - validation_fraction))))
-        return "\\n\\n".join(records[:cut]), "\\n\\n".join(records[cut:]), "blank_line_record_boundary"
+        return "\n\n".join(records[:cut]), "\n\n".join(records[cut:]), "blank_line_record_boundary"
     # Generic prose may not have record separators. Keep a documented fallback for it.
     cut = max(1, min(len(source) - 1, int(len(source) * (1.0 - validation_fraction))))
     return source[:cut], source[cut:], "character_boundary_fallback"
@@ -205,8 +205,8 @@ def train(args):
         split_strategy = "external_validation_file"
         if len(val_text) < args.context + 2:
             raise ValueError("validation corpus is too short for the chosen context length")
-        train_records = {part.strip() for part in train_text.split("\\n\\n") if part.strip()}
-        val_records = {part.strip() for part in val_text.split("\\n\\n") if part.strip()}
+        train_records = {part.strip() for part in train_text.split("\n\n") if part.strip()}
+        val_records = {part.strip() for part in val_text.split("\n\n") if part.strip()}
         overlap = train_records.intersection(val_records)
         if overlap:
             raise ValueError(f"training and validation corpora share {len(overlap)} exact record(s)")
