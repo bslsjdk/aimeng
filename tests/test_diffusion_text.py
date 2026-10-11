@@ -1,6 +1,6 @@
 import unittest
 import torch
-from scripts.train_diffusion_text import DiffusionTextModel, make_vocab, encode, SMOKE_TEXT, split_train_validation
+from scripts.train_diffusion_text import DiffusionTextModel, make_vocab, encode, SMOKE_TEXT, split_train_validation, evaluation_starts
 
 class DiffusionTextTests(unittest.TestCase):
     def test_vocab_roundtrip_and_model_shapes(self):
@@ -38,6 +38,14 @@ class DiffusionTextTests(unittest.TestCase):
         self.assertFalse(train_records & validation_records)
         self.assertEqual(len(train_records | validation_records), 10)
         self.assertTrue(all(record.startswith("record-") for record in train_records | validation_records))
+
+    def test_evaluation_samples_span_the_full_validation_text(self):
+        starts = evaluation_starts(10000, context=32, limit=5)
+        self.assertEqual(len(starts), 5)
+        self.assertEqual(starts[0], 0)
+        self.assertEqual(starts[-1], 10000 - 32 - 2)
+        self.assertEqual(starts, sorted(set(starts)))
+        self.assertEqual(evaluation_starts(20, context=32, limit=5), [])
 
     def test_vocabulary_can_be_fit_without_validation_characters(self):
         stoi, itos = make_vocab("training text", max_vocab=2048)
