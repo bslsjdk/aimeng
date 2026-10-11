@@ -185,9 +185,10 @@ class ParkourGRUPolicy(nn.Module):
         feature_size = VOXEL_COUNT * EMBED_DIM + STATIC_FEATURE_SIZE
         self.encoder = nn.Sequential(nn.Linear(feature_size, encoder_width), nn.ReLU())
         self.cell = nn.GRUCell(encoder_width, hidden_size)
-        # Direct geometry skip: the recurrent state models history, while the action head can
-        # still read goal distance/alignment without forcing it through the recurrent state.
-        self.readout = nn.Linear(hidden_size + STATIC_FEATURE_SIZE, len(ACTIONS))
+        # A separate geometry head gives goal alignment and "at goal" features a clean,
+        # short gradient path instead of making them compete with hundreds of recurrent units.
+        self.readout = nn.Linear(hidden_size, len(ACTIONS))
+        self.geometry_head = nn.Linear(STATIC_FEATURE_SIZE, len(ACTIONS), bias=False)
 
     def forward(
         self, voxels: Tensor, goals: Tensor, yaws: Tensor, hidden: Tensor | None = None,
@@ -227,8 +228,7 @@ class ParkourGRUPolicy(nn.Module):
         logits = []
         for step in range(steps):
             hidden = self.cell(encoded[:, step, :], hidden)
-            readout_input = torch.cat([hidden, static_features[:, step, :]], dim=-1)
-            logits.append(self.readout(readout_input))
+            logits.append(self.readout(hidden) + self.geometry_head(static_features[:, step, :]))
         if not logits:
             return voxels.new_empty((batch, 0, len(ACTIONS)), dtype=torch.float32), hidden
         return torch.stack(logits, dim=1), hidden
@@ -256,13 +256,12 @@ class ParkourGRUPolicy(nn.Module):
                 widened.cell.weight_hh[new_rows, old_size:].zero_()
                 widened.cell.bias_ih[new_rows].copy_(self.cell.bias_ih[old_rows])
                 widened.cell.bias_hh[new_rows].copy_(self.cell.bias_hh[old_rows])
-            # Columns are [recurrent hidden state, static geometry features]. Preserve the
-            # old hidden contributions, initialize newly added hidden contributions to zero,
-            # and copy static-feature columns to their shifted positions.
-            widened.readout.weight[:, :old_size].copy_(self.readout.weight[:, :old_size])
-            widened.readout.weight[:, old_size:new_size].zero_()
-            widened.readout.weight[:, new_size:].copy_(self.readout.weight[:, old_size:])
+            # Zero new recurrent-to-action weights so old logits are unchanged, and
+            # copy the parallel geometry head exactly.
+            widened.readout.weight[:, :old_size].copy_(self.readout.weight)
+            widened.readout.weight[:, old_size:].zero_()
             widened.readout.bias.copy_(self.readout.bias)
+            widened.geometry_head.load_state_dict(self.geometry_head.state_dict())
         return widened
 
 
@@ -517,7 +516,7 @@ def main() -> int:
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location=device)
-        if checkpoint.get("format") != "aimeng-mc-curriculum-checkpoint-v2":
+        if checkpoint.get("format") != "aimeng-mc-curriculum-checkpoint-v3":
             parser.error("unsupported checkpoint format")
         if checkpoint.get("action_vocab") != list(ACTIONS):
             parser.error("checkpoint action vocabulary does not match this code version")
@@ -686,7 +685,7 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     torch.save({
-        "format": "aimeng-mc-curriculum-checkpoint-v2",
+        "format": "aimeng-mc-curriculum-checkpoint-v3",
         "stage": stage.name,
         "hidden_size": model.hidden_size,
         "encoder_width": model.encoder_width,
