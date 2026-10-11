@@ -37,8 +37,9 @@ python scripts/benchmark_recurrent_reasoning.py --steps 300 --train-size 2048 --
 ```
 
 For every seed, the script trains separate concept-cloud models with 1, 2, 3,
-and 4 cycles and a GRU baseline on the same training examples, using the same
-embedding width, optimizer, and number of update steps. Training uses the
+and 4 cycles, plus two GRU baselines, on the same training examples and update
+step budget. One GRU uses the same width; the other chooses a width that most
+closely matches the concept-cloud parameter count. All use the same optimizer. Training uses the
 configured sequence length only. Evaluation reports both held-out examples at
 the training length and extrapolation to sequences 4 and 8 tokens longer, with
 no further training. It also reports router recall, throughput, parameter
@@ -56,6 +57,8 @@ count, training loss movement, and wall-clock training time as JSON.
   router recall are critical and should be improved in a later training revision.
 - The GRU is a useful baseline, not a straw man. Same examples and update steps
   do not guarantee identical FLOPs, so this is not yet a matched-compute result.
+  The parameter-matched GRU reduces parameter-count unfairness, while the
+  same-width GRU preserves a capacity-width reference.
 - The target rule is algorithmic and synthetic. Passing it only establishes
   performance on this task; it does not establish language understanding,
   broad reasoning, or superiority over other model families.
