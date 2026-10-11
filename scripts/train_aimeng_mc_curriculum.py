@@ -472,20 +472,33 @@ def main() -> int:
     else:
         model = ParkourGRUPolicy(args.hidden_size).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    class_weights = compute_class_weights([current_file, *replay_files], device)
 
     best_val_accuracy = -1.0
+    best_val_episode_success = -1.0
     best_state = clone_state_dict(model)
     best_hidden_size = model.hidden_size
     stale_epochs = 0
     history = []
     expansion_events = []
     for epoch in range(args.epochs):
-        train_loss, combined_train_accuracy = train_one_epoch(model, train_loader, optimizer, device)
-        current_train_loss, current_train_accuracy, current_train_count = evaluate_action_accuracy(
-            model, current_train_eval_loader, device
+        train_loss, combined_train_accuracy = train_one_epoch(
+            model, train_loader, optimizer, device, class_weights
         )
-        val_loss, val_accuracy, val_count = evaluate_action_accuracy(model, val_loader, device)
-        if val_accuracy > best_val_accuracy + 0.002:
+        current_train_loss, current_train_accuracy, current_train_count, current_train_recalls = evaluate_action_accuracy(
+            model, current_train_eval_loader, device, class_weights
+        )
+        val_loss, val_accuracy, val_count, val_recalls = evaluate_action_accuracy(
+            model, val_loader, device, class_weights
+        )
+        val_rollout = evaluate_rollouts(model, val_dataset, device)
+        improved = (
+            val_rollout["success_rate"] > best_val_episode_success + 1e-9
+            or (abs(val_rollout["success_rate"] - best_val_episode_success) <= 1e-9
+                and val_accuracy > best_val_accuracy + 0.002)
+        )
+        if improved:
+            best_val_episode_success = val_rollout["success_rate"]
             best_val_accuracy = val_accuracy
             best_state = clone_state_dict(model)
             best_hidden_size = model.hidden_size
@@ -498,8 +511,13 @@ def main() -> int:
             "current_stage_train_loss": current_train_loss,
             "current_stage_train_action_accuracy": current_train_accuracy,
             "current_stage_train_steps": current_train_count,
+            "current_stage_train_action_recall": current_train_recalls,
             "validation_loss": val_loss,
             "validation_action_accuracy": val_accuracy, "validation_steps": val_count,
+            "validation_action_recall": val_recalls,
+            "validation_episode_success_rate": val_rollout["success_rate"],
+            "validation_episode_successes": val_rollout["successes"],
+            "validation_rollout_episodes": val_rollout["episodes"],
             "hidden_size": model.hidden_size,
         })
         print(json.dumps(history[-1]), flush=True)
@@ -516,6 +534,7 @@ def main() -> int:
             new_size = min(old_size * 2, args.max_hidden_size)
             model = model.expand_hidden(new_size, seed=args.seed + epoch + 1)
             optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+            best_val_episode_success = val_rollout["success_rate"]
             best_val_accuracy = val_accuracy
             best_hidden_size = model.hidden_size
             best_state = clone_state_dict(model)
@@ -529,12 +548,19 @@ def main() -> int:
     if model.hidden_size != best_hidden_size:
         raise RuntimeError("best checkpoint hidden size does not match final model")
     model.load_state_dict(best_state)
-    train_loss, combined_train_accuracy, train_steps = evaluate_action_accuracy(model, train_eval_loader, device)
-    current_train_loss, current_train_accuracy, current_train_steps = evaluate_action_accuracy(
-        model, current_train_eval_loader, device
+    train_loss, combined_train_accuracy, train_steps, combined_train_recalls = evaluate_action_accuracy(
+        model, train_eval_loader, device, class_weights
     )
-    val_loss, val_accuracy, val_steps = evaluate_action_accuracy(model, val_loader, device)
-    test_loss, test_accuracy, test_steps = evaluate_action_accuracy(model, test_loader, device)
+    current_train_loss, current_train_accuracy, current_train_steps, current_train_recalls = evaluate_action_accuracy(
+        model, current_train_eval_loader, device, class_weights
+    )
+    val_loss, val_accuracy, val_steps, val_recalls = evaluate_action_accuracy(
+        model, val_loader, device, class_weights
+    )
+    test_loss, test_accuracy, test_steps, test_recalls = evaluate_action_accuracy(
+        model, test_loader, device, class_weights
+    )
+    current_validation_rollout = evaluate_rollouts(model, val_dataset, device)
     current_rollout = evaluate_rollouts(model, test_dataset, device)
 
     prior_metrics: dict[str, Any] = {}
@@ -556,8 +582,10 @@ def main() -> int:
         "episodes": current_rollout["episodes"],
         "teacher_action_accuracy": test_accuracy,
         "teacher_action_steps": test_steps,
+        "teacher_action_recall": test_recalls,
         "train_teacher_action_accuracy": current_train_accuracy,
         "validation_teacher_action_accuracy": val_accuracy,
+        "validation_episode_success_rate": current_validation_rollout["success_rate"],
     }
     report = {
         "format": "aimeng-mc-curriculum-metrics-v1",
@@ -573,8 +601,14 @@ def main() -> int:
         "combined_train_action_accuracy": combined_train_accuracy,
         "current_stage_train_action_accuracy": current_train_accuracy,
         "current_stage_train_action_steps": current_train_steps,
+        "current_stage_train_action_recall": current_train_recalls,
+        "combined_train_action_recall": combined_train_recalls,
         "validation_action_accuracy": val_accuracy,
+        "validation_action_recall": val_recalls,
+        "validation_episode_success_rate": current_validation_rollout["success_rate"],
         "test_action_accuracy": test_accuracy,
+        "test_action_recall": test_recalls,
+        "class_weights": {ACTIONS[i]: float(class_weights[i].item()) for i in range(len(ACTIONS))},
         "test_episode_success_rate": current_rollout["success_rate"],
         "test_episode_successes": current_rollout["successes"],
         "test_episode_count": current_rollout["episodes"],
@@ -601,6 +635,7 @@ def main() -> int:
     print(json.dumps({
         "checkpoint": str(args.output), "report": str(report_path), "stage": stage.name,
         "hidden_size": model.hidden_size, "test_teacher_action_accuracy": test_accuracy,
+        "validation_episode_success_rate": current_validation_rollout["success_rate"],
         "test_episode_success_rate": current_rollout["success_rate"],
         "test_episodes": current_rollout["episodes"], "expansion_events": expansion_events,
     }, ensure_ascii=False))
