@@ -41,7 +41,7 @@ on:
       epochs:
         description: "Training epochs per stage"
         type: number
-        default: 15
+        default: 30
         required: true
       hidden_size:
         description: "Initial recurrent hidden units"
@@ -109,7 +109,7 @@ jobs:
     env:
       MAX_STAGE: ${{ inputs.max_stage || 'turning' }}
       EPISODES: ${{ inputs.episodes || 1000 }}
-      EPOCHS: ${{ inputs.epochs || 15 }}
+      EPOCHS: ${{ inputs.epochs || 30 }}
       HIDDEN_SIZE: ${{ inputs.hidden_size || 1024 }}
       MAX_HIDDEN_SIZE: ${{ inputs.max_hidden_size || 2048 }}
       AUTO_EXPAND: ${{ inputs.auto_expand }}
