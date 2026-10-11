@@ -147,6 +147,30 @@ class RecurrentConceptCloudNet(nn.Module):
             cycle_token_logits.append(token_logits)
             cycle_active_counts.append(active_mask.sum(dim=-1))
 
+            # Auxiliary oracle-cloud supervision trains the token scorer for
+            # the correct expert without changing the route-free logits used
+            # for prediction/evaluation. This is a loss-only branch: the gold
+            # cloud is never inserted into candidate_ids or token_logits.
+            if target is not None:
+                oracle_cloud = self.token_cloud[target]
+                oracle_ids = self.cloud_members[oracle_cloud]
+                oracle_valid = oracle_ids >= 0
+                safe_oracle_ids = oracle_ids.clamp_min(0)
+                oracle_vectors = self.embedding(safe_oracle_ids)
+                oracle_scores = torch.einsum(
+                    "bmw,bw->bm", oracle_vectors, query
+                ) + self.token_bias[safe_oracle_ids]
+                oracle_scores = oracle_scores.masked_fill(
+                    ~oracle_valid, torch.finfo(ctx.dtype).min
+                )
+                oracle_logits = torch.full_like(
+                    token_logits, torch.finfo(ctx.dtype).min
+                )
+                oracle_logits.scatter_reduce_(
+                    1, safe_oracle_ids, oracle_scores,
+                    reduce="amax", include_self=True,
+                )
+
             # Sparse message passing: gather only active source neurons before
             # the learned projection. The previous implementation projected all
             # neurons and masked most messages afterward, wasting work whenever
@@ -214,6 +238,8 @@ class RecurrentConceptCloudNet(nn.Module):
         if target is not None:
             result["target_cloud"] = self.token_cloud[target]
             result["target_routed"] = (self.token_cloud[target, None] == result["selected_clouds"]).any(dim=-1)
+            # Loss-only supervision; never used as the model's prediction logits.
+            result["oracle_token_logits"] = oracle_logits
         return result
 
     def loss(self, output: dict[str, torch.Tensor], target: torch.Tensor, router_weight: float = 1.0) -> dict[str, torch.Tensor]:
@@ -228,6 +254,9 @@ class RecurrentConceptCloudNet(nn.Module):
             # A differentiable zero avoids CE on an unreachable target logit
             # (which is intentionally set to the dtype minimum).
             token_loss = output["cloud_logits"].sum() * 0.0
+        # The separate oracle branch trains token discrimination inside the
+        # correct cloud. It cannot affect inference logits or router metrics.
+        oracle_token_loss = F.cross_entropy(output["oracle_token_logits"], target)
         cloud_loss = F.cross_entropy(output["cloud_logits"], self.token_cloud[target])
         # Intermediate cycle supervision teaches successive predictions to improve.
         intermediate = output["cycle_cloud_logits"]
@@ -235,8 +264,14 @@ class RecurrentConceptCloudNet(nn.Module):
             F.cross_entropy(intermediate[:, i], self.token_cloud[target])
             for i in range(intermediate.shape[1])
         ]).mean()
-        total = token_loss + router_weight * cloud_loss + 0.25 * aux
-        return {"loss": total, "token_loss": token_loss, "cloud_loss": cloud_loss, "cycle_aux_loss": aux}
+        total = token_loss + 0.5 * oracle_token_loss + router_weight * cloud_loss + 0.25 * aux
+        return {
+            "loss": total,
+            "token_loss": token_loss,
+            "oracle_token_loss": oracle_token_loss,
+            "cloud_loss": cloud_loss,
+            "cycle_aux_loss": aux,
+        }
 
 
 def main() -> None:
