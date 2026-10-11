@@ -343,6 +343,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1 or args.hidden_size < 1 or args.max_hidden_size < 1:
         parser.error("epochs, batch size, and hidden sizes must be positive")
+    if args.hidden_size > 4096 or args.max_hidden_size > 4096:
+        parser.error("until end-to-end memory is benchmarked, hidden sizes are capped at 4096")
     if args.max_hidden_size < args.hidden_size:
         parser.error("--max-hidden-size must be >= --hidden-size")
     if args.expand_patience < 2 or args.threads < 1:
@@ -368,11 +370,14 @@ def main() -> int:
         if STAGE_BY_NAME[replay.stage_name].index >= stage.index:
             parser.error(f"replay stage {replay.stage_name} must precede current stage {stage.name}")
 
-    train_datasets = [EpisodeDataset(current_file, "train")]
+    current_train_dataset = EpisodeDataset(current_file, "train")
+    train_datasets = [current_train_dataset]
     train_datasets.extend(EpisodeDataset(source, "train") for source in replay_files)
     train_datasets = [dataset for dataset in train_datasets if len(dataset)]
     val_dataset = EpisodeDataset(current_file, "validation")
     test_dataset = EpisodeDataset(current_file, "test")
+    if not len(current_train_dataset):
+        parser.error("current stage has no training episodes; generate at least 2 episodes")
     if not train_datasets:
         parser.error("no training episodes; generate more episodes")
     if not len(val_dataset):
@@ -397,6 +402,7 @@ def main() -> int:
         collate_fn=collate_episodes,
     )
     train_eval_loader = DataLoader(combined_train, batch_size=args.batch_size, shuffle=False, collate_fn=collate_episodes)
+    current_train_eval_loader = DataLoader(current_train_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_episodes)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_episodes)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_episodes)
 
@@ -406,7 +412,12 @@ def main() -> int:
             parser.error("unsupported checkpoint format")
         if checkpoint.get("action_vocab") != list(ACTIONS):
             parser.error("checkpoint action vocabulary does not match this code version")
+        checkpoint_stage = checkpoint.get("stage")
+        if checkpoint_stage not in STAGE_BY_NAME or STAGE_BY_NAME[checkpoint_stage].index > stage.index:
+            parser.error("resume checkpoint must come from the current or an earlier curriculum stage")
         model = ParkourGRUPolicy(int(checkpoint["hidden_size"]), int(checkpoint["encoder_width"])).to(device)
+        if model.hidden_size > args.max_hidden_size:
+            parser.error("resume checkpoint hidden size exceeds --max-hidden-size")
         model.load_state_dict(checkpoint["model_state_dict"])
     else:
         model = ParkourGRUPolicy(args.hidden_size).to(device)
@@ -419,7 +430,10 @@ def main() -> int:
     history = []
     expansion_events = []
     for epoch in range(args.epochs):
-        train_loss, train_accuracy = train_one_epoch(model, train_loader, optimizer, device)
+        train_loss, combined_train_accuracy = train_one_epoch(model, train_loader, optimizer, device)
+        current_train_loss, current_train_accuracy, current_train_count = evaluate_action_accuracy(
+            model, current_train_eval_loader, device
+        )
         val_loss, val_accuracy, val_count = evaluate_action_accuracy(model, val_loader, device)
         if val_accuracy > best_val_accuracy + 0.002:
             best_val_accuracy = val_accuracy
@@ -429,8 +443,12 @@ def main() -> int:
         else:
             stale_epochs += 1
         history.append({
-            "epoch": epoch + 1, "train_loss": train_loss,
-            "train_action_accuracy": train_accuracy, "validation_loss": val_loss,
+            "epoch": epoch + 1, "combined_train_loss": train_loss,
+            "combined_train_action_accuracy": combined_train_accuracy,
+            "current_stage_train_loss": current_train_loss,
+            "current_stage_train_action_accuracy": current_train_accuracy,
+            "current_stage_train_steps": current_train_count,
+            "validation_loss": val_loss,
             "validation_action_accuracy": val_accuracy, "validation_steps": val_count,
             "hidden_size": model.hidden_size,
         })
@@ -440,8 +458,8 @@ def main() -> int:
             args.auto_expand and epoch < args.epochs - 1
             and model.hidden_size < args.max_hidden_size
             and stale_epochs >= args.expand_patience
-            and train_accuracy < 0.95 and val_accuracy < 0.90
-            and abs(train_accuracy - val_accuracy) <= 0.10
+            and current_train_accuracy < 0.95 and val_accuracy < 0.90
+            and abs(current_train_accuracy - val_accuracy) <= 0.10
         )
         if can_expand:
             old_size = model.hidden_size
@@ -461,7 +479,10 @@ def main() -> int:
     if model.hidden_size != best_hidden_size:
         raise RuntimeError("best checkpoint hidden size does not match final model")
     model.load_state_dict(best_state)
-    train_loss, train_accuracy, train_steps = evaluate_action_accuracy(model, train_eval_loader, device)
+    train_loss, combined_train_accuracy, train_steps = evaluate_action_accuracy(model, train_eval_loader, device)
+    current_train_loss, current_train_accuracy, current_train_steps = evaluate_action_accuracy(
+        model, current_train_eval_loader, device
+    )
     val_loss, val_accuracy, val_steps = evaluate_action_accuracy(model, val_loader, device)
     test_loss, test_accuracy, test_steps = evaluate_action_accuracy(model, test_loader, device)
     current_rollout = evaluate_rollouts(model, test_dataset, device)
@@ -485,7 +506,7 @@ def main() -> int:
         "episodes": current_rollout["episodes"],
         "teacher_action_accuracy": test_accuracy,
         "teacher_action_steps": test_steps,
-        "train_teacher_action_accuracy": train_accuracy,
+        "train_teacher_action_accuracy": current_train_accuracy,
         "validation_teacher_action_accuracy": val_accuracy,
     }
     report = {
@@ -499,7 +520,9 @@ def main() -> int:
         "train_episodes": len(combined_train),
         "validation_episodes": len(val_dataset),
         "test_episodes": len(test_dataset),
-        "train_action_accuracy": train_accuracy,
+        "combined_train_action_accuracy": combined_train_accuracy,
+        "current_stage_train_action_accuracy": current_train_accuracy,
+        "current_stage_train_action_steps": current_train_steps,
         "validation_action_accuracy": val_accuracy,
         "test_action_accuracy": test_accuracy,
         "test_episode_success_rate": current_rollout["success_rate"],
