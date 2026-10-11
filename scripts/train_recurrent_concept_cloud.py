@@ -9,11 +9,15 @@ import argparse
 import json
 import random
 import time
+import sys
+from pathlib import Path
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+# Support both `python scripts/train_recurrent_concept_cloud.py` and `python -m ...`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.experiment_recurrent_concept_cloud import RecurrentConceptCloudNet
 
 
