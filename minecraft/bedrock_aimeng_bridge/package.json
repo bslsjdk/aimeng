@@ -1,0 +1,8 @@
+{
+  "name": "aimeng-bedrock-live-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check scripts/main.js && node --check scripts/policy.js"
+  }
+}

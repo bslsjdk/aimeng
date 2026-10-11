@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "AIMENG Live Parkour Bridge",
+    "description": "In-game physics and observation bridge for AIMENG parkour experiments. Initial controller is a clearly labeled heuristic smoke-test policy.",
+    "uuid": "b50a3b29-9b75-4c21-9d1f-4a89a5e4c712",
+    "version": [0, 1, 0],
+    "min_engine_version": [1, 21, 90]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "ebd2aaf0-77c5-48de-a2cb-92ef2d42c61b",
+      "version": [0, 1, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "0bb30e1a-0fc4-4684-8c56-0f312f8e5e18",
+      "version": [0, 1, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.0.0"
+    }
+  ]
+}

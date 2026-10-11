@@ -1,0 +1,42 @@
+name: AIMENG Bedrock Bridge Validation
+
+on:
+  push:
+    branches:
+      - feat/minecraft-bedrock-live-bridge
+    paths:
+      - "minecraft/bedrock_aimeng_bridge/**"
+      - ".github/workflows/aimeng-bedrock-bridge-validation.yml"
+  pull_request:
+    paths:
+      - "minecraft/bedrock_aimeng_bridge/**"
+      - ".github/workflows/aimeng-bedrock-bridge-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: minecraft/bedrock_aimeng_bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate manifest JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); console.log('manifest JSON OK')"
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Test policy action selection
+        run: |
+          node --input-type=module -e "
+          import assert from 'node:assert/strict';
+          import {selectAction, ACTIONS} from './scripts/policy.js';
+          assert.equal(selectAction({goalDistance: 1, onGround: true, supportAhead: true, headingErrorDegrees: 0}), ACTIONS.STOP);
+          assert.equal(selectAction({goalDistance: 3, onGround: true, supportAhead: false, headingErrorDegrees: 0}), ACTIONS.JUMP_FORWARD);
+          assert.equal(selectAction({goalDistance: 3, onGround: false, supportAhead: true, headingErrorDegrees: 30}), ACTIONS.TURN_RIGHT);
+          assert.equal(selectAction({goalDistance: 3, onGround: false, supportAhead: true, headingErrorDegrees: -30}), ACTIONS.TURN_LEFT);
+          assert.equal(selectAction({goalDistance: 3, onGround: false, supportAhead: true, headingErrorDegrees: 0}), ACTIONS.WALK_FORWARD);
+          console.log('policy tests passed');
+          "
