@@ -14,6 +14,18 @@ class MultiHopBenchmarkTests(unittest.TestCase):
             expected = (3 * expected + x[:, position] + 1) % vocab
         self.assertTrue(torch.equal(y, expected))
 
+    def test_additive_rule_labels_match_full_sequence_sum(self):
+        vocab = 32
+        x, y = make_data(24, vocab, 8, 17, "cpu", rule="additive")
+        expected = torch.zeros(len(x), dtype=torch.long)
+        for position in range(x.shape[1]):
+            expected = (expected + x[:, position] + 1) % vocab
+        self.assertTrue(torch.equal(y, expected))
+
+    def test_unknown_rule_is_rejected(self):
+        with self.assertRaises(ValueError):
+            make_data(2, 32, 8, 17, "cpu", rule="unknown")
+
     def test_early_tokens_can_change_final_answer(self):
         vocab = 32
         first = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
