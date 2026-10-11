@@ -115,13 +115,13 @@ class ParkourTrainingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "walking.jsonl"
             with path.open("w", encoding="utf-8") as handle:
-                for record in generate_records("walking", 333, 10):
+                for record in generate_records("walking", 333, 20):
                     handle.write(json.dumps(record) + "\n")
             source = EpisodeFile(path)
             test = EpisodeDataset(source, "test")
             model = ParkourGRUPolicy(hidden_size=8, encoder_width=16)
             result = evaluate_rollouts(model, test, torch.device("cpu"))
-            self.assertEqual(result["episodes"], 1)
+            self.assertEqual(result["episodes"], 2)
             self.assertGreaterEqual(result["success_rate"], 0.0)
             self.assertLessEqual(result["success_rate"], 1.0)
 
