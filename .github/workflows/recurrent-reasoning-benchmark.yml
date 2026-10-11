@@ -37,7 +37,31 @@ jobs:
         run: python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
       - name: Run repeated-seed multi-hop benchmark
         run: |
-          python scripts/benchmark_recurrent_reasoning.py --steps 60 --train-size 512 --test-size 128 --batch-size 32 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 > recurrent-reasoning-results.json
+          set -o pipefail
+          python scripts/benchmark_recurrent_reasoning.py --steps 60 --train-size 512 --test-size 128 --batch-size 32 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee recurrent-reasoning-results.json
+      - name: Write benchmark summary
+        if: always() && hashFiles('recurrent-reasoning-results.json') != ''
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("recurrent-reasoning-results.json").read_text())
+          lines = ["## Multi-hop benchmark summary", "", "| Model | Accuracy (mean ± population SD) | Throughput examples/s (mean) |", "|---|---:|---:|"]
+          keys = [("Concept cloud, 1 cycle", "concept_cloud_cycles_1"), ("Concept cloud, 2 cycles", "concept_cloud_cycles_2"), ("Concept cloud, 3 cycles", "concept_cloud_cycles_3"), ("Concept cloud, 4 cycles", "concept_cloud_cycles_4"), ("GRU, same width", "gru_same_width"), ("GRU, parameter matched", "gru_parameter_matched")]
+          for label, key in keys:
+              item = data["summary_across_seeds"][key]
+              a = item["same_length_accuracy"]
+              t = item["same_length_throughput"]
+              lines.append(f"| {label} | {a['mean']:.4f} ± {a['population_stddev']:.4f} | {t['mean']:.1f} |")
+          lines += ["", "Long-sequence accuracy:", "", "| Model | Length 12 | Length 16 |", "|---|---:|---:|"]
+          for label, key in keys:
+              item = data["summary_across_seeds"][key]["longer_sequence_accuracy"]
+              lines.append(f"| {label} | {item['12']['mean']:.4f} | {item['16']['mean']:.4f} |")
+          Path("summary.md").write_text("\\n".join(lines) + "\\n")
+          print(Path("summary.md").read_text())
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(Path("summary.md").read_text())
+          PY
       - name: Upload benchmark JSON
         uses: actions/upload-artifact@v4
         with:
