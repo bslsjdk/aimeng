@@ -20,11 +20,11 @@ python scripts/train_recurrent_concept_cloud.py --steps 180 --train-size 2048 --
 For a faster smoke run, use `--steps 20 --train-size 512 --test-size 128 --batch-size 16`.
 For CUDA, use `--device auto`; CPU is the portable default.
 
-The script trains the recurrent concept-cloud model and a GRU baseline on the same deterministic synthetic next-token task, then prints JSON containing training-loss movement, test accuracy/loss, throughput, router recall@k, parameter counts, and route-conditional accuracy.
+By default, the script uses an easy deterministic successor-token task (`--task successor`) to check whether learning works at all. Use `--task context-sum` for a harder rule depending on the last two tokens. Both systems receive the same generated data and training steps. The script prints JSON containing training-loss movement, test accuracy/loss, throughput, router recall@k, parameter counts, and route-conditional accuracy.
 
 ## Interpretation rules
 
-- This synthetic rule is a pipeline sanity check, **not** evidence of general language intelligence.
+- These synthetic rules are pipeline sanity checks, **not** evidence of general language intelligence.
 - Router recall@k is mandatory: the token head is allowed to score only proposed concept clouds at inference.
 - Routing misses count as failures in overall concept-cloud token accuracy; conditional accuracy is reported separately.
 - The prototype still allocates dense vocabulary logits and uses Python loops for cloud scoring. Its sparse mask is not proof of lower latency or memory use.
