@@ -166,7 +166,7 @@ def generate_records(seed: int, episodes: int, obstacle_rate: float = 0.18) -> I
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--episodes", type=int, default=1000, help="number of random maps/episodes")
+    parser.add_argument("--self-test", action="store_true", help="run fast schema/reproducibility checks and exit")\n    parser.add_argument("--episodes", type=int, default=1000, help="number of random maps/episodes")
     parser.add_argument("--seed", type=int, default=12345, help="reproducible master seed")
     parser.add_argument("--obstacle-rate", type=float, default=0.18, help="solid obstacle probability")
     parser.add_argument("--output", type=Path, default=Path("aimeng_mc_train.jsonl"))
