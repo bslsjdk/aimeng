@@ -1,0 +1,24 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "aimeng:parkour_agent",
+      "materials": {
+        "default": "entity_alphatest"
+      },
+      "textures": {
+        "default": "textures/entity/steve"
+      },
+      "geometry": {
+        "default": "geometry.aimeng.parkour_agent"
+      },
+      "render_controllers": [
+        "controller.render.aimeng.parkour_agent"
+      ],
+      "spawn_egg": {
+        "base_color": "#273B58",
+        "overlay_color": "#52D6A5"
+      }
+    }
+  }
+}
