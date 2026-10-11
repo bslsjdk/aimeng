@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+from collections import Counter
 import sys
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ class EpisodeFile:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.entries: list[dict[str, Any]] = []
+        self.action_counts = {"train": Counter(), "validation": Counter(), "test": Counter()}
         current_id = None
         current_start = 0
         current_split = None
@@ -59,6 +61,8 @@ class EpisodeFile:
                 split = record.get("split")
                 stage = record.get("curriculum_stage", {}).get("name")
                 map_seed = int(record["map_seed"])
+                if split in self.action_counts:
+                    self.action_counts[split][record["teacher_action"]["action"]] += 1
                 if current_id is None:
                     current_id, current_start = episode_id, line_start
                     current_split, current_stage, current_seed = split, stage, map_seed
@@ -221,51 +225,97 @@ def accuracy_counts(logits: Tensor, targets: Tensor) -> tuple[int, int]:
     return correct, int(mask.sum().item())
 
 
+def compute_class_weights(sources: list[EpisodeFile], device: torch.device) -> Tensor:
+    counts = Counter()
+    for source in sources:
+        counts.update(source.action_counts["train"])
+    values = torch.tensor([counts.get(action, 0) for action in ACTIONS], dtype=torch.float32, device=device)
+    present = values > 0
+    weights = torch.ones_like(values)
+    if present.any():
+        mean_count = values[present].mean()
+        # Inverse-square-root frequency reduces the walk/stop imbalance without letting
+        # a rare action dominate the full loss. Actions absent in this stage remain weight 1.
+        weights[present] = torch.sqrt(mean_count / values[present])
+        weighted_mean = (weights[present] * values[present]).sum() / values[present].sum()
+        weights[present] /= weighted_mean.clamp_min(1e-8)
+    return weights
+
+
 def evaluate_action_accuracy(
     model: ParkourGRUPolicy, loader: DataLoader, device: torch.device,
-) -> tuple[float, float, int]:
+    class_weights: Tensor | None = None,
+) -> tuple[float, float, int, dict[str, float]]:
     model.eval()
     correct_total = count_total = 0
-    loss_total = 0.0
+    loss_total = loss_denominator = 0.0
+    per_class_correct = [0] * len(ACTIONS)
+    per_class_count = [0] * len(ACTIONS)
     with torch.no_grad():
         for batch in loader:
             batch = move_batch(batch, device)
             logits, _ = model(batch["voxels"], batch["goals"], batch["yaws"])
-            mask = batch["actions"] != PAD_ACTION
-            correct, count = accuracy_counts(logits, batch["actions"])
+            targets = batch["actions"]
+            mask = targets != PAD_ACTION
+            correct, count = accuracy_counts(logits, targets)
             correct_total += correct
             count_total += count
             if count:
-                loss_total += float(F.cross_entropy(logits[mask], batch["actions"][mask]).item()) * count
+                selected_targets = targets[mask]
+                loss_sum = F.cross_entropy(
+                    logits[mask], selected_targets, weight=class_weights, reduction="sum"
+                )
+                loss_total += float(loss_sum.item())
+                if class_weights is None:
+                    loss_denominator += count
+                else:
+                    loss_denominator += float(class_weights[selected_targets].sum().item())
+                predictions = logits.argmax(dim=-1)
+                for action_id in range(len(ACTIONS)):
+                    class_mask = targets == action_id
+                    class_count = int(class_mask.sum().item())
+                    if class_count:
+                        per_class_count[action_id] += class_count
+                        per_class_correct[action_id] += int(
+                            (predictions[class_mask] == action_id).sum().item()
+                        )
+    recalls = {
+        ACTIONS[index]: per_class_correct[index] / per_class_count[index]
+        for index in range(len(ACTIONS)) if per_class_count[index]
+    }
     if count_total == 0:
-        return 0.0, 0.0, 0
-    return loss_total / count_total, correct_total / count_total, count_total
+        return 0.0, 0.0, 0, recalls
+    return loss_total / max(loss_denominator, 1e-8), correct_total / count_total, count_total, recalls
 
 
 def train_one_epoch(
     model: ParkourGRUPolicy, loader: DataLoader, optimizer: torch.optim.Optimizer,
-    device: torch.device,
+    device: torch.device, class_weights: Tensor,
 ) -> tuple[float, float]:
     model.train()
-    loss_total = 0.0
+    loss_total = loss_denominator = 0.0
     correct_total = count_total = 0
     for batch in loader:
         batch = move_batch(batch, device)
         optimizer.zero_grad(set_to_none=True)
         logits, _ = model(batch["voxels"], batch["goals"], batch["yaws"])
-        mask = batch["actions"] != PAD_ACTION
+        targets = batch["actions"]
+        mask = targets != PAD_ACTION
         if not mask.any():
             continue
-        loss = F.cross_entropy(logits[mask], batch["actions"][mask])
+        selected_targets = targets[mask]
+        loss = F.cross_entropy(logits[mask], selected_targets, weight=class_weights)
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         count = int(mask.sum().item())
-        loss_total += float(loss.detach().item()) * count
-        correct, _ = accuracy_counts(logits.detach(), batch["actions"])
+        denominator = float(class_weights[selected_targets].sum().item())
+        loss_total += float(loss.detach().item()) * denominator
+        loss_denominator += denominator
+        correct, _ = accuracy_counts(logits.detach(), targets)
         correct_total += correct
         count_total += count
-    return loss_total / max(1, count_total), correct_total / max(1, count_total)
+    return loss_total / max(loss_denominator, 1e-8), correct_total / max(1, count_total)
 
 
 def clone_state_dict(model: nn.Module) -> dict[str, Tensor]:
