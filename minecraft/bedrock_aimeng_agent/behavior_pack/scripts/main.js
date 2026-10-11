@@ -102,7 +102,7 @@ world.afterEvents.scriptEventReceive.subscribe((event) => {
       tell(player, "§c[AIMENG] No agent within 32 blocks. First run /summon aimeng:parkour_agent ~ ~ ~");
       return;
     }
-    const parts = (event.message || "").trim().split(/\\s+/);
+    const parts = (event.message || "").trim().split(/\s+/);
     if (parts.length !== 3 || parts.some(part => part.length === 0)) {
       tell(player, "§c[AIMENG] Usage: /scriptevent aimeng:agent_goto <x> <y> <z> (coordinates can use ~ or ~offset)");
       return;
