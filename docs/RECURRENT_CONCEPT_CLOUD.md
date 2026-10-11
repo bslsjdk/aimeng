@@ -29,7 +29,7 @@ python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
 ## Important caveats
 
 - Cloud assignments are currently synthetic/explicit. No semantic clustering algorithm has been validated.
-- Training and inference both score only router-proposed clouds. The gold target cloud is never injected into token scoring. Token loss is applied only when the router includes the target cloud; router loss still trains on every example. Report router top-k recall separately.
+- Training and inference both score only router-proposed clouds for prediction. The gold target cloud is never injected into the prediction logits. Route-free token loss is applied when the target cloud is routed; a separate loss-only oracle-cloud auxiliary objective trains token discrimination inside the correct cloud without changing inference logits. Router loss still trains on every example. Report router top-k recall separately.
 - The returned token-logit tensor is dense for ease of integration, but token scores outside the candidate clouds are masked. The prototype still allocates this dense tensor, so it does not yet prove memory savings or end-to-end speedup.
 - The prototype is not integrated into the Android AIMG runtime or the existing production model exporter.
 - A fixed cycle count is used initially. Adaptive stopping should only be added after quality, stability, and latency are measured.
@@ -52,3 +52,9 @@ Compare full-vocabulary and recurrent-cloud models on the same training/validati
 - CI records a three-seed synthetic multi-hop comparison, including longer
   sequence tests, and publishes summary metrics plus a JSON artifact. These
   results are screening evidence only; the workload is small and synthetic.
+
+- The loss-only oracle-cloud auxiliary objective is intentionally isolated from
+  the inference output. A regression test verifies that an unrouted target stays
+  masked in prediction logits while the auxiliary loss remains finite and
+  differentiable. This is supervised expert training, not evidence of improved
+  generalization until the held-out benchmark confirms it.
