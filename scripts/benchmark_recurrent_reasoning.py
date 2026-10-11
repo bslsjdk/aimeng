@@ -172,8 +172,8 @@ def main():
     args = parser.parse_args()
     if args.steps < 1 or args.batch_size < 1 or args.train_size < 1 or args.test_size < 1:
         parser.error("steps, batch-size, train-size and test-size must be positive")
-    if args.vocab < 8 or args.vocab % args.clouds:
-        parser.error("vocab must be >=8 and divisible by clouds")
+    if args.clouds < 1 or args.vocab < 8 or args.vocab % args.clouds:
+        parser.error("clouds must be >=1; vocab must be >=8 and divisible by clouds")
     if args.seq_len < 3:
         parser.error("seq-len must be >=3 for a multi-hop task")
     if args.threads < 1:
@@ -182,6 +182,13 @@ def main():
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
     if device == "cuda" and not torch.cuda.is_available():
         parser.error("CUDA requested but unavailable")
+    if args.self_test:
+        # Keep the self-test fast enough for CI and constrained terminals.
+        args.steps = min(args.steps, 3)
+        args.train_size = min(args.train_size, 64)
+        args.test_size = min(args.test_size, 32)
+        args.batch_size = min(args.batch_size, 16)
+        args.seq_len = max(args.seq_len, 3)
     seeds = [17] if args.self_test else [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
     if not seeds:
         parser.error("provide at least one seed")
