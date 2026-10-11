@@ -189,6 +189,13 @@ class ParkourGRUPolicy(nn.Module):
         # short gradient path instead of making them compete with hundreds of recurrent units.
         self.readout = nn.Linear(hidden_size, len(ACTIONS))
         self.geometry_head = nn.Linear(STATIC_FEATURE_SIZE, len(ACTIONS), bias=False)
+        # The linear head handles simple geometric signals; this small nonlinear head
+        # learns conditional rules such as "turn toward the target only when lateral error
+        # is nonzero". This targets turning failures without widening the recurrent state.
+        self.geometry_mlp = nn.Sequential(
+            nn.Linear(STATIC_FEATURE_SIZE, 64), nn.ReLU(),
+            nn.Linear(64, len(ACTIONS)),
+        )
 
     def forward(
         self, voxels: Tensor, goals: Tensor, yaws: Tensor, hidden: Tensor | None = None,
@@ -228,7 +235,8 @@ class ParkourGRUPolicy(nn.Module):
         logits = []
         for step in range(steps):
             hidden = self.cell(encoded[:, step, :], hidden)
-            logits.append(self.readout(hidden) + self.geometry_head(static_features[:, step, :]))
+            geometry = static_features[:, step, :]
+            logits.append(self.readout(hidden) + self.geometry_head(geometry) + self.geometry_mlp(geometry))
         if not logits:
             return voxels.new_empty((batch, 0, len(ACTIONS)), dtype=torch.float32), hidden
         return torch.stack(logits, dim=1), hidden
@@ -262,6 +270,7 @@ class ParkourGRUPolicy(nn.Module):
             widened.readout.weight[:, old_size:].zero_()
             widened.readout.bias.copy_(self.readout.bias)
             widened.geometry_head.load_state_dict(self.geometry_head.state_dict())
+            widened.geometry_mlp.load_state_dict(self.geometry_mlp.state_dict())
         return widened
 
 
@@ -536,7 +545,19 @@ def main() -> int:
         model = ParkourGRUPolicy(int(checkpoint["hidden_size"]), int(checkpoint["encoder_width"])).to(device)
         if model.hidden_size > args.max_hidden_size:
             parser.error("resume checkpoint hidden size exceeds --max-hidden-size")
-        model.load_state_dict(checkpoint["model_state_dict"])
+        # Backward-compatible warm start: older v3 checkpoints have only the linear
+        # geometry head. Keep their learned weights and initialize the new nonlinear
+        # correction head, then fine-tune it on the current curriculum stage.
+        incompatible = model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        allowed_missing = {
+            "geometry_mlp.0.weight", "geometry_mlp.0.bias",
+            "geometry_mlp.2.weight", "geometry_mlp.2.bias",
+        }
+        if set(incompatible.missing_keys) - allowed_missing or incompatible.unexpected_keys:
+            parser.error(
+                "checkpoint architecture mismatch: "
+                f"missing={incompatible.missing_keys}, unexpected={incompatible.unexpected_keys}"
+            )
     else:
         model = ParkourGRUPolicy(args.hidden_size).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
