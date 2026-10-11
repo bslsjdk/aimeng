@@ -194,6 +194,7 @@ def main():
         parser.error("provide at least one seed")
     results = {
         "benchmark": "synthetic_multi_hop_modular_state_v1",
+        "self_test_status": "PASS" if args.self_test else None,
         "rule": "state=0; for each token: state=(3*state+token+1)%vocab",
         "warning": "Synthetic compositional task only; not proof of natural-language reasoning.",
         "config": vars(args) | {"device_resolved": device, "seeds_used": seeds},
