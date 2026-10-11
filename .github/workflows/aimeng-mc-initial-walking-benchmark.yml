@@ -9,7 +9,7 @@ on:
 
 jobs:
   initial-walking:
-    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-rebalanced-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-stage-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-diverse-benchmark]')
+    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-rebalanced-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-stage-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-diverse-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walk-train-mask-benchmark]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
           python scripts/generate_aimeng_mc_curriculum.py --stage walking --episodes 1000 --seed 20261011 --output data/walking.jsonl
       - name: Train the initial 1024-unit recurrent policy
         run: |
-          python scripts/train_aimeng_mc_curriculum.py --stage walking --data data/walking.jsonl --epochs 5 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20261011 --device cpu --threads 2 --output checkpoints/walking.pt --report reports/walking.json
+          python scripts/train_aimeng_mc_curriculum.py --stage walking --data data/walking.jsonl --epochs 10 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20261011 --device cpu --threads 2 --output checkpoints/walking.pt --report reports/walking.json
       - name: Check first-stage progression recommendation
         run: |
           python scripts/generate_aimeng_mc_curriculum.py --metrics reports/walking.json > reports/walking.gate.json
@@ -52,7 +52,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aimeng-mc-walking-diverse-benchmark
+          name: aimeng-mc-walking-train-mask-benchmark
           path: |
             checkpoints/
             reports/
