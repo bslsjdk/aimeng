@@ -114,8 +114,11 @@ def train_one(model, train_x, train_y, steps, batch_size, lr, seed, cloud=False)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         losses.append(float(loss.detach()))
-    return {"first_20_step_mean_loss": sum(losses[:20]) / max(1, len(losses[:20])),
-            "last_20_step_mean_loss": sum(losses[-20:]) / max(1, len(losses[-20:])),
+    window = max(1, min(20, len(losses) // 3))
+    return {"first_window_steps": window,
+            "first_window_mean_loss": sum(losses[:window]) / window,
+            "last_window_steps": window,
+            "last_window_mean_loss": sum(losses[-window:]) / window,
             "training_seconds": time.perf_counter() - started}
 
 
@@ -134,10 +137,14 @@ def main():
     p.add_argument("--cycles", type=int, default=3)
     p.add_argument("--seq-len", type=int, default=6)
     p.add_argument("--seed", type=int, default=17)
+    p.add_argument("--threads", type=int, default=1)
     p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "auto"])
     args = p.parse_args()
     if args.steps < 1 or args.batch_size < 1 or args.vocab % args.clouds:
         p.error("steps/batch-size must be positive and vocab must be divisible by clouds")
+    if args.threads < 1:
+        p.error("--threads must be >= 1")
+    torch.set_num_threads(args.threads)
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
     if device == "cuda" and not torch.cuda.is_available():
         p.error("CUDA requested but unavailable")
