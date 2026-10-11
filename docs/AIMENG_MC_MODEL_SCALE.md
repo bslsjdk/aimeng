@@ -26,10 +26,11 @@ Run all sizes on the same tasks, map seeds, observation cadence, training exampl
 | Variant | Spatial channels | Recurrent hidden size | Purpose |
 |---|---:|---:|---|
 | S | 16 / 32 | 256 | Debugging and cheap baseline |
-| M | 16 / 32 / 64 | 512 | Recommended first serious model |
-| L | 32 / 64 / 96 | 1024 | Capacity test after M is stable |
+| M | 16 / 32 / 64 | 1024 | Recommended first serious model |
+| L | 32 / 64 / 96 | 2048 | Capacity test after M is stable |
+| XL | 32 / 64 / 128 | 4096 | Only if 2048 shows clear underfitting and compute permits |
 
-These are candidate sizes, not claims about an optimum. Start with M for task development, but keep S as the control. Only spend resources on L if M's learning curves show underfitting rather than bad observations, reward design, or training bugs.
+These are candidate sizes, not claims about an optimum. Start with M (1024 recurrent hidden units) for task development, but keep S as the control. Only spend resources on L or XL if the learning curves show underfitting rather than bad observations, reward design, or training bugs. For reference, a GRU with a 128-dimensional input and hidden size 1024 has about 3.55 million recurrent-layer parameters before the spatial encoder, embeddings, and output heads; hidden size 2048 has about 13.38 million. Count all modules when matching baselines.
 
 ## Training curriculum
 
