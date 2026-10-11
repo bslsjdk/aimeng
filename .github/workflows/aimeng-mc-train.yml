@@ -97,8 +97,8 @@ jobs:
           PY
 
   train-curriculum:
-    # PRs automatically train through turning so the next-stage evidence is produced without requiring mobile UI interaction.
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event_name == 'push'
+    # Run expensive curriculum training once on push; pull requests still run validation without duplicating the CPU-heavy training job.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     needs: validate
     runs-on: ubuntu-latest
     env:
