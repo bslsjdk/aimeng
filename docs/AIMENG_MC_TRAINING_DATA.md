@@ -122,3 +122,76 @@ Do not call synthetic-grid success “Minecraft mastery”. Do not call structur
 ## Android constraint
 
 The complete runtime must stay below 4 GB RAM. Keep observations bounded, encode only when needed, and measure the whole process on the actual device. The current AIMG wrapper does not automatically export a new model architecture; Android inference and matching export code must be implemented and tested separately.
+
+
+## Curriculum: easy walking first, parkour later
+
+The generator `scripts/generate_aimeng_mc_curriculum.py` provides eight deterministic synthetic stages:
+
+| Order | Stage | Skill focus |
+|---:|---|---|
+| 1 | `walking` | Flat, straight walking and stopping; no turns or jumps in the teacher route |
+| 2 | `turning` | Left/right turns and simple route following |
+| 3 | `obstacle_avoidance` | Walk around a forced blocking obstacle |
+| 4 | `small_jump` | Cross a one-cell gap with a two-cell jump macro |
+| 5 | `gap_jump` | Cross a wider, two-cell gap |
+| 6 | `rotating_jump` | Cross a gap while changing the landing heading by 90 degrees |
+| 7 | `super_jump` | Cross a three-cell gap with an extended-jump macro |
+| 8 | `double_jump` | Cross a four-cell gap using a five-cell macro |
+
+Start with walking only:
+
+```bash
+python scripts/generate_aimeng_mc_curriculum.py --self-test
+python scripts/generate_aimeng_mc_curriculum.py --stage walking --episodes 1000 --seed 12345 --output walking.jsonl
+```
+
+Later, generate the next stage as the controller earns it, using different held-out map seeds:
+
+```bash
+python scripts/generate_aimeng_mc_curriculum.py --stage turning --episodes 1000 --seed 23456 --output turning.jsonl
+python scripts/generate_aimeng_mc_curriculum.py --stage obstacle_avoidance --episodes 1000 --seed 34567 --output obstacles.jsonl
+```
+
+The remaining valid stage names are `small_jump`, `gap_jump`, `rotating_jump`, `super_jump`, and `double_jump`. Do not train all stages as one undifferentiated dataset at the start. The later-stage data is available for subsequent phases, not a recommendation to skip the easy stages.
+
+### Evidence-based progression gate
+
+After a stage, evaluate on at least 100 held-out episodes. A candidate next stage needs a success rate of at least 90%. Before moving beyond each newly learned stage, retest previously learned skills: at least 50 retention episodes and at least 85% success are required for each earlier stage. If current-stage mastery or old-skill retention fails, repeat training/evaluation at the current level rather than increasing difficulty. Export scores to JSON and ask for a recommendation:
+
+```bash
+python scripts/generate_aimeng_mc_curriculum.py --metrics stage_metrics.json
+```
+
+Expected shape:
+
+```json
+{
+  "stages": {
+    "walking": {
+      "success_rate": 0.96,
+      "episodes": 100,
+      "retention_success_rate": 0.92,
+      "retention_episodes": 50
+    },
+    "turning": {
+      "success_rate": 0.93,
+      "episodes": 100,
+      "retention_success_rate": 0.90,
+      "retention_episodes": 50
+    }
+  }
+}
+```
+
+This progression checker is an evaluation gate, not yet connected to an end-to-end model trainer. It cannot truthfully claim a stage is learned until measured scores are supplied.
+
+### Memory budget
+
+Every curriculum stage keeps the same **9×5×9 = 405 voxel observation**. Harder stages change the map layout and action labels; they do not enlarge the per-step input tensor. The generator writes JSONL incrementally instead of loading the entire dataset into RAM. Dataset size primarily consumes disk space.
+
+The actual deployed memory cost is controlled by model width, activation/hidden-state storage, inference batch/sequence length, and the runtime. For dense recurrent layers, widening the hidden state increases recurrent weight cost roughly quadratically; doubling hidden width can approach four times the recurrent matrix storage. Increase the model only when evaluation shows a capacity bottleneck, then measure end-to-end memory and latency. The Android runtime must remain below 4 GiB RAM.
+
+### Not vanilla Minecraft physics
+
+These jump labels are **abstract synthetic action macros**. In particular, `super_jump` and `double_jump` are not guaranteed vanilla Bedrock abilities; a custom movement mechanic may be required. The symbolic grid deliberately isolates the learning curriculum from version-specific game physics. Before claiming real parkour competence, calibrate action execution and collision/landing outcomes against the target Bedrock version or a real parkour map. A synthetic pass is only a data-generator/teacher-path result, not a trained model result.
