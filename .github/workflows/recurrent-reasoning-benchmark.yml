@@ -7,6 +7,7 @@ on:
       - "scripts/experiment_recurrent_concept_cloud.py"
       - "tests/test_concept_cloud.py"
       - "tests/test_recurrent_concept_cloud.py"
+      - "tests/test_recurrent_reasoning_benchmark.py"
       - ".github/workflows/recurrent-reasoning-benchmark.yml"
   workflow_dispatch:
 
@@ -28,5 +29,7 @@ jobs:
         run: python -m py_compile scripts/benchmark_recurrent_reasoning.py scripts/experiment_recurrent_concept_cloud.py
       - name: Run multi-hop benchmark self-test
         run: python scripts/benchmark_recurrent_reasoning.py --self-test
+      - name: Run benchmark target tests
+        run: python -m unittest tests.test_recurrent_reasoning_benchmark
       - name: Run concept-cloud unit tests
         run: python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
