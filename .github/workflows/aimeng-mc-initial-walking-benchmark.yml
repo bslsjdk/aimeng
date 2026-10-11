@@ -9,7 +9,7 @@ on:
 
 jobs:
   initial-walking:
-    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]')
+    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-rebalanced-benchmark]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aimeng-mc-initial-walking-benchmark
+          name: aimeng-mc-walking-rebalanced-benchmark
           path: |
             checkpoints/
             reports/
