@@ -41,7 +41,7 @@ on:
       epochs:
         description: "Training epochs per stage"
         type: number
-        default: 5
+        default: 15
         required: true
       hidden_size:
         description: "Initial recurrent hidden units"
