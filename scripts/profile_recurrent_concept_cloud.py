@@ -1,7 +1,6 @@
 """Operator-level CPU profile for the recurrent concept-cloud inference path.
 
-This is an inference-only diagnostic: it does not train models or claim that
-operator-level profiler timings equal end-to-end Android latency.
+Inference-only diagnostic. Profiler operator timings are not Android latency.
 """
 from __future__ import annotations
 
@@ -22,7 +21,6 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=30)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--cycles", type=int, default=4)
-    parser.add_argument("--device", choices=("cpu",), default="cpu")
     args = parser.parse_args()
     if min(args.batch_size, args.seq_len, args.iterations, args.threads, args.cycles) < 1:
         parser.error("batch-size, seq-len, iterations, threads and cycles must be positive")
@@ -43,8 +41,7 @@ def main() -> None:
             start = time.perf_counter()
             model(x)
             samples.append(time.perf_counter() - start)
-        # Profile a separate short window so profiler overhead does not pollute
-        # the ordinary end-to-end latency samples above.
+        # Keep profiler overhead separate from ordinary latency samples.
         with torch.profiler.profile(
             activities=[torch.profiler.ProfilerActivity.CPU],
             record_shapes=True,
@@ -53,19 +50,25 @@ def main() -> None:
             for _ in range(min(10, args.iterations)):
                 model(x)
     ordered = sorted(samples)
+    mean_seconds = sum(samples) / len(samples)
+    events = sorted(
+        prof.key_averages(),
+        key=lambda event: event.self_cpu_time_total,
+        reverse=True,
+    )[:20]
     result = {
         "benchmark": "recurrent_concept_cloud_operator_profile_v1",
-        "note": "CPU-only diagnostic; profiler operator times include instrumentation overhead and are not Android measurements.",
+        "note": "CPU-only diagnostic; profiler timings include instrumentation overhead and are not Android measurements.",
         "config": vars(args) | {
             "vocab": vocab, "width": width, "neurons": neurons,
             "active_k": active_k, "candidate_clouds": 3,
             "parameters": sum(p.numel() for p in model.parameters()),
         },
         "latency_seconds": {
-            "mean": sum(samples) / len(samples),
+            "mean": mean_seconds,
             "median": ordered[len(ordered) // 2],
             "p90": ordered[min(len(ordered) - 1, int(0.9 * len(ordered)))],
-            "examples_per_second": args.batch_size / (sum(samples) / len(samples)),
+            "examples_per_second": args.batch_size / mean_seconds,
         },
         "top_operators": [
             {
@@ -76,13 +79,7 @@ def main() -> None:
                 "self_cpu_memory_bytes": event.self_cpu_memory_usage,
                 "input_shapes": event.input_shapes[:3],
             }
-            for event in prof.key_averages().table(
-                sort_by="self_cpu_time_total", row_limit=20
-            ) and sorted(
-                prof.key_averages(),
-                key=lambda event: event.self_cpu_time_total,
-                reverse=True,
-            )[:20]
+            for event in events
         ],
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
