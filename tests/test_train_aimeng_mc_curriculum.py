@@ -7,6 +7,7 @@ import torch
 
 from scripts.generate_aimeng_mc_curriculum import generate_records
 from scripts.train_aimeng_mc_curriculum import (
+    ACTION_TO_ID,
     EpisodeDataset,
     EpisodeFile,
     ParkourGRUPolicy,
@@ -26,9 +27,11 @@ class ParkourTrainingTests(unittest.TestCase):
             "train": Counter({"walk_forward": 90, "stop": 10})
         })
         weights = compute_class_weights([source], torch.device("cpu"))
-        self.assertAlmostEqual(float(weights[1].item() / weights[0].item()), 9.0, places=5)
-        self.assertAlmostEqual(float(weights[0].item() * 90 + weights[1].item() * 10) / 100, 1.0, places=5)
-        self.assertEqual(float(weights[2].item()), 1.0)
+        walk_weight = float(weights[ACTION_TO_ID["walk_forward"]].item())
+        stop_weight = float(weights[ACTION_TO_ID["stop"]].item())
+        self.assertAlmostEqual(stop_weight / walk_weight, 9.0, places=5)
+        self.assertAlmostEqual((walk_weight * 90 + stop_weight * 10) / 100, 1.0, places=5)
+        self.assertEqual(float(weights[ACTION_TO_ID["turn_left"]].item()), 1.0)
 
     def test_action_space_unlocks_by_curriculum_stage(self):
         walking = set(allowed_actions_for_stage("walking"))
