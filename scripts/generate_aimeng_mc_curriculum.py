@@ -194,25 +194,29 @@ def make_course(stage: Stage, seed: int):
         distance = rng.randrange(1, min(7, max_forward) + 1)
         goal = (start_x + dx * distance, start_z + dz * distance)
     elif stage.name == "turning":
-        # Random start, heading and diagonal target. The world is still obstacle-free, but
-        # the route must combine straight movement and at least one controlled turn.
-        start = (
-            rng.randrange(2, WORLD_SIZE - 2),
-            rng.randrange(2, WORLD_SIZE - 2),
-        )
-        start_x, start_z = start
-        start_yaw = rng.randrange(4)
+        # First turning curriculum: one reachable L-shaped route, with the goal ahead
+        # and to either side of the initial heading. This teaches the two turn directions
+        # before later stages introduce blockers and more ambiguous routes.
         for _ in range(100):
-            goal = (rng.randrange(1, WORLD_SIZE - 1), rng.randrange(1, WORLD_SIZE - 1))
-            if (
-                goal != start
-                and goal[0] != start_x
-                and goal[1] != start_z
-                and abs(goal[0] - start_x) + abs(goal[1] - start_z) <= 8
-            ):
+            start = (
+                rng.randrange(3, WORLD_SIZE - 3),
+                rng.randrange(3, WORLD_SIZE - 3),
+            )
+            start_x, start_z = start
+            start_yaw = rng.randrange(4)
+            turn_sign = rng.choice((-1, 1))
+            forward_distance = rng.randrange(1, 5)
+            side_distance = rng.randrange(1, 5)
+            fdx, fdz = DIRS[start_yaw]
+            sdx, sdz = DIRS[(start_yaw + turn_sign) % 4]
+            goal = (
+                start_x + fdx * forward_distance + sdx * side_distance,
+                start_z + fdz * forward_distance + sdz * side_distance,
+            )
+            if _in_world(goal):
                 break
         else:
-            goal = (max(1, start_x - 2), max(1, start_z - 2))
+            raise RuntimeError(f"could not choose an in-bounds L-shaped turning route for seed {seed}")
     elif stage.name == "obstacle_avoidance":
         # One randomly placed blocker interrupts a straight route. Spawn/heading/goal and
         # the blocker distance change per seed, so the policy must learn a detour, not one map.
