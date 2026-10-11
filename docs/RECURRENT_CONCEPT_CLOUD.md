@@ -29,7 +29,7 @@ python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
 ## Important caveats
 
 - Cloud assignments are currently synthetic/explicit. No semantic clustering algorithm has been validated.
-- During training, the gold target cloud is included in token scoring so the token head can learn even when the router misses. Inference does not receive that assistance. Report router top-k recall separately.
+- Training and inference both score only router-proposed clouds. The gold target cloud is never injected into token scoring. Token loss is applied only when the router includes the target cloud; router loss still trains on every example. Report router top-k recall separately.
 - The returned token-logit tensor is dense for ease of integration, but token scores outside the candidate clouds are masked. The prototype still allocates this dense tensor, so it does not yet prove memory savings or end-to-end speedup.
 - The prototype is not integrated into the Android AIMG runtime or the existing production model exporter.
 - A fixed cycle count is used initially. Adaptive stopping should only be added after quality, stability, and latency are measured.
