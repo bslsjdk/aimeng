@@ -70,4 +70,26 @@ class DiffusionTextTests(unittest.TestCase):
         torch.optim.AdamW(model.parameters(), lr=0.01).step()
         self.assertFalse(torch.equal(before, model.decoder.weight.detach()))
 
+
+    def test_benchmark_emits_reproducible_metrics(self):
+        import tempfile
+        from types import SimpleNamespace
+        from pathlib import Path
+        from scripts.train_diffusion_text import benchmark
+        with tempfile.TemporaryDirectory() as tmp:
+            args = SimpleNamespace(
+                seed=7, threads=1, text=None, vocab_size=128, context=8,
+                neurons=16, width=8, active_k=2, fanout=4, max_steps=2,
+                benchmark_samples=8, warmup=2, early_stop=False,
+                halt_threshold=0.8, convergence_threshold=0.025,
+                min_steps=2, output=tmp,
+            )
+            report = benchmark(args)
+            self.assertEqual(report["format"], "aimeng-inference-benchmark-v1")
+            self.assertEqual(report["samples"], 8)
+            self.assertGreater(report["mean_latency_ms"], 0)
+            self.assertGreater(report["samples_per_second"], 0)
+            self.assertTrue((Path(tmp) / "benchmark.json").exists())
+            self.assertIn("top1_next_char_accuracy", report)
+
 if __name__ == "__main__": unittest.main()

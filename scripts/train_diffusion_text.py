@@ -305,10 +305,83 @@ def generate_from_checkpoint(checkpoint_path: str, prompt: str, count: int, temp
                       "checkpoint_source":ckpt.get("source","unknown"), "warning":ckpt.get("warning","")}, ensure_ascii=False), flush=True)
     return result
 
+
+def benchmark(args):
+    """Reproducible microbenchmark: report latency/throughput, active steps, and memory."""
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if args.threads > 0:
+        torch.set_num_threads(args.threads)
+    source = Path(args.text).read_text(encoding="utf-8") if args.text else SMOKE_TEXT
+    train_text, val_text, _ = split_train_validation(source)
+    stoi, itos = make_vocab(train_text, args.vocab_size)
+    ids = encode(val_text, stoi)
+    if len(ids) < args.context + 2:
+        raise ValueError("benchmark corpus is too short for context length")
+    model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k,
+                               args.fanout, args.max_steps).eval()
+    rng = random.Random(args.seed)
+    starts = evaluation_starts(len(ids), args.context, max(args.benchmark_samples, 1))
+    if not starts:
+        raise ValueError("no valid benchmark targets")
+    xs = [torch.tensor([ids[s:s+args.context]], dtype=torch.long) for s in starts]
+    with torch.inference_mode():
+        for x in xs[:min(args.warmup, len(xs))]:
+            model(x, early_stop=args.early_stop, halt_threshold=args.halt_threshold,
+                  convergence_threshold=args.convergence_threshold, min_steps=args.min_steps)
+        latencies = []
+        correct = 0
+        total_steps = 0.0
+        for x, s in zip(xs, starts):
+            t0 = time.perf_counter()
+            out = model(x, early_stop=args.early_stop, halt_threshold=args.halt_threshold,
+                        convergence_threshold=args.convergence_threshold, min_steps=args.min_steps)
+            latencies.append((time.perf_counter() - t0) * 1000.0)
+            target = ids[s + args.context]
+            correct += int(int(out["logits"].argmax(dim=-1).item()) == target)
+            total_steps += float(out["expected_steps"].mean().item())
+    current_mib, metric, peak_rss_mib = process_memory_mib()
+    ordered = sorted(latencies)
+    p95 = ordered[min(len(ordered)-1, math.ceil(0.95*len(ordered))-1)]
+    report = {
+        "format": "aimeng-inference-benchmark-v1",
+        "warning": "Synthetic smoke corpus results measure implementation behavior only, not general intelligence.",
+        "source": "user_corpus" if args.text else "built_in_smoke_corpus",
+        "seed": args.seed, "threads": torch.get_num_threads(),
+        "device": "cpu", "torch_version": torch.__version__,
+        "neurons": args.neurons, "width": args.width, "active_k": args.active_k,
+        "fanout": args.fanout, "max_steps": args.max_steps, "context": args.context,
+        "early_stop": args.early_stop, "halt_threshold": args.halt_threshold,
+        "convergence_threshold": args.convergence_threshold, "min_steps": args.min_steps,
+        "samples": len(latencies), "warmup": min(args.warmup, len(xs)),
+        "mean_latency_ms": round(sum(latencies)/len(latencies), 4),
+        "median_latency_ms": round(ordered[len(ordered)//2], 4),
+        "p95_latency_ms": round(p95, 4),
+        "samples_per_second": round(1000.0*len(latencies)/sum(latencies), 3),
+        "top1_next_char_accuracy": round(correct/len(latencies), 6),
+        "mean_expected_steps": round(total_steps/len(latencies), 4),
+        "memory_metric": metric, "current_memory_mib": round(current_mib, 2),
+        "process_peak_rss_mib": round(peak_rss_mib, 2),
+    }
+    out_dir = Path(args.output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "benchmark.json"
+    path.write_text(json.dumps(report, indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
+    print(json.dumps(report, ensure_ascii=False), flush=True)
+    return report
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--text", type=str, default=None, help="UTF-8 training corpus; omitted means synthetic smoke data only")
     p.add_argument("--validation-text", type=str, default=None, help="Optional independent UTF-8 validation corpus; exact blank-line records shared with training are rejected")
+    p.add_argument("--benchmark", action="store_true", help="run a repeatable CPU inference benchmark and write benchmark.json")
+    p.add_argument("--benchmark-samples", type=int, default=256)
+    p.add_argument("--warmup", type=int, default=16)
+    p.add_argument("--threads", type=int, default=1, help="CPU intra-op threads; use same value for all comparisons")
+    p.add_argument("--early-stop", action="store_true", help="enable learned early stopping during benchmark")
+    p.add_argument("--halt-threshold", type=float, default=0.80)
+    p.add_argument("--convergence-threshold", type=float, default=0.025)
+    p.add_argument("--min-steps", type=int, default=2)
     p.add_argument("--checkpoint", type=str, default=None, help="load a checkpoint for terminal-only text generation")
     p.add_argument("--prompt", type=str, default="", help="prompt used with --checkpoint")
     p.add_argument("--generate-tokens", type=int, default=120, help="characters to generate with --checkpoint")
@@ -323,6 +396,11 @@ def main():
     p.add_argument("--memory-stop-mib", type=float, default=2560.0, help="stop and checkpoint at this PSS/RSS MiB threshold")
     p.add_argument("--output", type=str, default="runs/diffusion-smoke")
     args=p.parse_args()
+    if args.benchmark:
+        if args.benchmark_samples < 1 or args.warmup < 0 or args.threads < 1:
+            p.error("benchmark-samples and threads must be positive; warmup must be non-negative")
+        benchmark(args)
+        return 0
     if args.checkpoint:
         generate_from_checkpoint(args.checkpoint, args.prompt, args.generate_tokens, args.temperature)
         return 0
