@@ -92,8 +92,9 @@ class ParkourTrainingTests(unittest.TestCase):
             train = EpisodeDataset(source, "train")
             validation = EpisodeDataset(source, "validation")
             test = EpisodeDataset(source, "test")
-            self.assertEqual((len(train), len(validation), len(test)), (16, 2, 2))
-            for split_name, dataset in (("train", train), ("validation", validation), ("test", test)):
+            retention = EpisodeDataset(source, "retention")
+            self.assertEqual((len(train), len(validation), len(test), len(retention)), (15, 2, 2, 1))
+            for split_name, dataset in (("train", train), ("validation", validation), ("test", test), ("retention", retention)):
                 for i in range(len(dataset)):
                     rows = dataset[i]
                     self.assertTrue(rows)
