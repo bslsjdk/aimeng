@@ -116,6 +116,13 @@ def evaluate_gru(model, x, y, batch_size: int):
 def run_seed(args, seed: int, device: str):
     train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, seed, device)
     test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, seed + 100_003, device)
+    # Length extrapolation: train only on seq_len, then test on longer sequences
+    # whose answer requires additional state updates not seen during training.
+    long_tests = {}
+    for extra in (4, 8):
+        length = args.seq_len + extra
+        lx, ly = make_data(args.test_size, args.vocab, length, seed + 200_003 + extra, device)
+        long_tests[str(length)] = (lx, ly)
     assignment = [i // (args.vocab // args.clouds) for i in range(args.vocab)]
     cycle_results = {}
     cloud_train_results = {}
@@ -134,7 +141,11 @@ def run_seed(args, seed: int, device: str):
         cycle_results[str(cycles)] = {
             "parameters": sum(p.numel() for p in cloud.parameters()),
             "train": cloud_train_results[str(cycles)],
-            "test": evaluate_cloud(cloud, test_x, test_y, args.batch_size, cycles),
+            "test_same_length": evaluate_cloud(cloud, test_x, test_y, args.batch_size, cycles),
+            "test_longer_sequences": {
+                length: evaluate_cloud(cloud, lx, ly, args.batch_size, cycles)
+                for length, (lx, ly) in long_tests.items()
+            },
         }
     torch.manual_seed(seed)
     baseline = GRUBaseline(args.vocab, args.width).to(device)
@@ -147,7 +158,11 @@ def run_seed(args, seed: int, device: str):
         "gru": {
             "parameters": sum(p.numel() for p in baseline.parameters()),
             "train": baseline_train,
-            "test": evaluate_gru(baseline, test_x, test_y, args.batch_size),
+            "test_same_length": evaluate_gru(baseline, test_x, test_y, args.batch_size),
+            "test_longer_sequences": {
+                length: evaluate_gru(baseline, lx, ly, args.batch_size)
+                for length, (lx, ly) in long_tests.items()
+            },
         },
     }
 
@@ -197,6 +212,7 @@ def main():
         "self_test_status": "PASS" if args.self_test else None,
         "rule": "state=0; for each token: state=(3*state+token+1)%vocab",
         "warning": "Synthetic compositional task only; not proof of natural-language reasoning.",
+        "generalization_protocol": "Train at configured seq_len; evaluate on same length and seq_len+4/seq_len+8 without further training.",
         "config": vars(args) | {"device_resolved": device, "seeds_used": seeds},
         "runs": [],
     }
