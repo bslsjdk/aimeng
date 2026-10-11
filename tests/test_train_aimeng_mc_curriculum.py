@@ -14,6 +14,8 @@ from scripts.train_aimeng_mc_curriculum import (
     allowed_actions_for_stage,
     compute_class_weights,
     mask_action_logits,
+    parameter_count,
+    estimated_weight_mib,
     collate_episodes,
     evaluate_rollouts,
 )
@@ -60,6 +62,14 @@ class ParkourTrainingTests(unittest.TestCase):
         self.assertTrue(torch.isneginf(masked[1]))
         self.assertFalse(torch.isneginf(masked[0]))
         self.assertFalse(torch.isneginf(masked[9]))
+
+    def test_parameter_and_weight_memory_estimates(self):
+        model = ParkourGRUPolicy(hidden_size=8, encoder_width=16)
+        params = parameter_count(model)
+        weight_mib = estimated_weight_mib(model)
+        self.assertEqual(params, sum(p.numel() for p in model.parameters() if p.requires_grad))
+        self.assertGreater(params, 0)
+        self.assertAlmostEqual(weight_mib, params * 4 / (1024 * 1024), places=6)
 
     def test_model_forward_shapes(self):
         model = ParkourGRUPolicy(hidden_size=8, encoder_width=16)
