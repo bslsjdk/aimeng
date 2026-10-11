@@ -97,15 +97,16 @@ jobs:
           PY
 
   train-curriculum:
-    if: github.event_name == 'workflow_dispatch'
+    # PRs automatically train through turning so the next-stage evidence is produced without requiring mobile UI interaction.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
     env:
-      MAX_STAGE: ${{ inputs.max_stage }}
-      EPISODES: ${{ inputs.episodes }}
-      EPOCHS: ${{ inputs.epochs }}
-      HIDDEN_SIZE: ${{ inputs.hidden_size }}
-      MAX_HIDDEN_SIZE: ${{ inputs.max_hidden_size }}
+      MAX_STAGE: ${{ inputs.max_stage || 'turning' }}
+      EPISODES: ${{ inputs.episodes || 1000 }}
+      EPOCHS: ${{ inputs.epochs || 15 }}
+      HIDDEN_SIZE: ${{ inputs.hidden_size || 1024 }}
+      MAX_HIDDEN_SIZE: ${{ inputs.max_hidden_size || 2048 }}
       AUTO_EXPAND: ${{ inputs.auto_expand }}
     steps:
       - uses: actions/checkout@v4
@@ -144,7 +145,7 @@ jobs:
               args+=(--resume "checkpoints/$previous.pt" --prior-report "reports/$previous.json")
               for ((j=0; j<i; j++)); do args+=(--replay-data "data/${STAGES[$j]}.jsonl"); done
             fi
-            if [[ "$AUTO_EXPAND" == "true" ]]; then args+=(--auto-expand); fi
+            if [[ "$AUTO_EXPAND" != "false" ]]; then args+=(--auto-expand); fi
             python scripts/train_aimeng_mc_curriculum.py "${args[@]}"
             python scripts/generate_aimeng_mc_curriculum.py --metrics "reports/$stage.json" > "reports/$stage.gate.json"
             cat "reports/$stage.gate.json"
