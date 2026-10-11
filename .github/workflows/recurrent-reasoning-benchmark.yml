@@ -39,6 +39,10 @@ jobs:
         run: |
           set -o pipefail
           python scripts/benchmark_recurrent_reasoning.py --steps 10000 --train-size 4096 --test-size 1024 --batch-size 64 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee recurrent-reasoning-results.json
+      - name: Run additive-rule diagnostic benchmark
+        run: |
+          set -o pipefail
+          python scripts/benchmark_recurrent_reasoning.py --rule additive --steps 5000 --train-size 4096 --test-size 1024 --batch-size 64 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee additive-reasoning-results.json
       - name: Write benchmark summary
         if: always() && hashFiles('recurrent-reasoning-results.json') != ''
         run: |
@@ -66,5 +70,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: recurrent-reasoning-results
-          path: recurrent-reasoning-results.json
+          path: |
+            recurrent-reasoning-results.json
+            additive-reasoning-results.json
           if-no-files-found: error
