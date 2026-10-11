@@ -73,7 +73,7 @@ class EpisodeFile:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.entries: list[dict[str, Any]] = []
-        self.action_counts = {"train": Counter(), "validation": Counter(), "test": Counter()}
+        self.action_counts = {"train": Counter(), "validation": Counter(), "test": Counter(), "retention": Counter()}
         current_id = None
         current_start = 0
         current_split = None
@@ -610,8 +610,8 @@ def main() -> int:
         prior_metrics = dict(prior_data.get("stages", prior_data))
     for prior_file in replay_files:
         prior_stage_name = prior_file.stage_name
-        prior_test = EpisodeDataset(prior_file, "test")
-        retention = evaluate_rollouts(model, prior_test, device)
+        prior_retention = EpisodeDataset(prior_file, "retention")
+        retention = evaluate_rollouts(model, prior_retention, device)
         metric = dict(prior_metrics.get(prior_stage_name, {}))
         metric["retention_success_rate"] = retention["success_rate"]
         metric["retention_episodes"] = retention["episodes"]
@@ -619,8 +619,11 @@ def main() -> int:
 
     prior_metrics[stage.name] = {
         **prior_metrics.get(stage.name, {}),
-        "success_rate": current_rollout["success_rate"],
-        "episodes": current_rollout["episodes"],
+        # Progression is based on validation episodes. Final test episodes stay separate.
+        "success_rate": current_validation_rollout["success_rate"],
+        "episodes": current_validation_rollout["episodes"],
+        "test_success_rate": current_rollout["success_rate"],
+        "test_episodes": current_rollout["episodes"],
         "teacher_action_accuracy": test_accuracy,
         "teacher_action_steps": test_steps,
         "teacher_action_recall": test_recalls,
