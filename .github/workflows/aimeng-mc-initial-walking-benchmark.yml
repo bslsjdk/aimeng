@@ -1,0 +1,60 @@
+name: AIMENG-MC initial walking benchmark
+
+on:
+  push:
+    paths:
+      - ".github/workflows/aimeng-mc-initial-walking-benchmark.yml"
+      - "scripts/generate_aimeng_mc_curriculum.py"
+      - "scripts/train_aimeng_mc_curriculum.py"
+
+jobs:
+  initial-walking:
+    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Generate 1000 seeded walking episodes
+        run: |
+          mkdir -p data checkpoints reports
+          python scripts/generate_aimeng_mc_curriculum.py --stage walking --episodes 1000 --seed 20261011 --output data/walking.jsonl
+      - name: Train the initial 1024-unit recurrent policy
+        run: |
+          python scripts/train_aimeng_mc_curriculum.py --stage walking --data data/walking.jsonl --epochs 5 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20261011 --device cpu --threads 2 --output checkpoints/walking.pt --report reports/walking.json
+      - name: Check first-stage progression recommendation
+        run: |
+          python scripts/generate_aimeng_mc_curriculum.py --metrics reports/walking.json > reports/walking.gate.json
+          cat reports/walking.gate.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("reports/walking.json").read_text())
+          assert report["stage"] == "walking"
+          assert report["test_episode_count"] == 100
+          assert 0.0 <= report["test_episode_success_rate"] <= 1.0
+          assert Path("checkpoints/walking.pt").is_file()
+          print(json.dumps({
+              "stage": report["stage"],
+              "hidden_size": report["hidden_size"],
+              "train_action_accuracy": report["current_stage_train_action_accuracy"],
+              "validation_action_accuracy": report["validation_action_accuracy"],
+              "test_action_accuracy": report["test_action_accuracy"],
+              "held_out_episode_success_rate": report["test_episode_success_rate"],
+              "test_episodes": report["test_episode_count"],
+              "expansion_events": report["expansion_events"],
+          }, indent=2))
+          PY
+      - name: Upload initial checkpoint and measured metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aimeng-mc-initial-walking-benchmark
+          path: |
+            checkpoints/
+            reports/
+          if-no-files-found: warn
+          retention-days: 30
