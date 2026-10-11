@@ -121,7 +121,9 @@ class RecurrentConceptCloudNet(nn.Module):
             candidate_ids = cloud_logits.topk(self.candidate_clouds, dim=-1).indices
             cycle_cloud_logits.append(cloud_logits)
 
-            # Score tokens only in the union of currently proposed clouds.
+            # Score only clouds proposed by the router, during BOTH training
+            # and inference. Never inject the gold target cloud into token scoring:
+            # doing so leaks the answer's cloud during training.
             token_logits = torch.full(
                 (batch, self.vocab_size), torch.finfo(ctx.dtype).min,
                 device=context.device, dtype=ctx.dtype,
@@ -130,12 +132,6 @@ class RecurrentConceptCloudNet(nn.Module):
             # The dense output tensor is retained for compatibility, but only
             # tokens belonging to the selected clouds receive real scores.
             scoring_clouds = candidate_ids
-            if target is not None:
-                # Teacher-force the gold cloud into token scoring during training;
-                # router recall is measured separately from its own top-k guesses.
-                scoring_clouds = torch.cat(
-                    [candidate_ids, self.token_cloud[target].unsqueeze(1)], dim=1
-                )
             token_ids = self.cloud_members[scoring_clouds]  # [batch, clouds, members]
             valid_tokens = token_ids >= 0
             safe_ids = token_ids.clamp_min(0)
@@ -199,7 +195,17 @@ class RecurrentConceptCloudNet(nn.Module):
         return result
 
     def loss(self, output: dict[str, torch.Tensor], target: torch.Tensor, router_weight: float = 1.0) -> dict[str, torch.Tensor]:
-        token_loss = F.cross_entropy(output["logits"], target)
+        # Token CE is defined only for examples whose gold token is actually
+        # reachable through the router's predicted clouds. Misses still train
+        # the router via cloud_loss, but cannot teach the token head using a
+        # hidden gold-cloud path that will not exist at inference.
+        routed = output["target_routed"]
+        if bool(routed.any()):
+            token_loss = F.cross_entropy(output["logits"][routed], target[routed])
+        else:
+            # A differentiable zero avoids CE on an unreachable target logit
+            # (which is intentionally set to the dtype minimum).
+            token_loss = output["cloud_logits"].sum() * 0.0
         cloud_loss = F.cross_entropy(output["cloud_logits"], self.token_cloud[target])
         # Intermediate cycle supervision teaches successive predictions to improve.
         intermediate = output["cycle_cloud_logits"]
