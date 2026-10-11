@@ -30,10 +30,10 @@ class DiffusionTextTests(unittest.TestCase):
         self.assertFalse(torch.allclose(ca, cb), "ordered sequences must have distinguishable context vectors")
 
     def test_validation_split_keeps_records_intact(self):
-        source = "\\n\\n".join([f"record-{i} unique{i}" for i in range(10)])
+        source = "\n\n".join([f"record-{i} unique{i}" for i in range(10)])
         train, validation, strategy = split_train_validation(source)
-        train_records = set(train.split("\\n\\n"))
-        validation_records = set(validation.split("\\n\\n"))
+        train_records = set(train.split("\n\n"))
+        validation_records = set(validation.split("\n\n"))
         self.assertEqual(strategy, "blank_line_record_boundary")
         self.assertFalse(train_records & validation_records)
         self.assertEqual(len(train_records | validation_records), 10)
