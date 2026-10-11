@@ -36,6 +36,22 @@ class MinecraftCurriculumTests(unittest.TestCase):
             self.assertTrue(all(row["teacher_action"]["action"] in ACTIONS for row in first))
             self.assertTrue(all(row["labels"]["at_goal"] == (row["teacher_action"]["action"] == "stop") for row in first))
 
+    def test_turning_curriculum_starts_with_forward_l_shaped_routes(self):
+        rows = [r for r in generate_records("turning", 20261012, 200) if r["step"] == 0]
+        sides = set()
+        for row in rows:
+            yaw = row["observation"]["yaw_bucket"]
+            dx, _, dz = row["observation"]["goal_offset"]
+            directions = ((0, -1), (1, 0), (0, 1), (-1, 0))
+            fx, fz = directions[yaw]
+            rx, rz = directions[(yaw + 1) % 4]
+            forward = dx * fx + dz * fz
+            lateral = dx * rx + dz * rz
+            self.assertGreater(forward, 0)
+            self.assertNotEqual(lateral, 0)
+            sides.add(1 if lateral > 0 else -1)
+        self.assertEqual(sides, {-1, 1})
+
     def test_turning_and_obstacle_maps_are_not_near_duplicates(self):
         turning = [r for r in generate_records("turning", 20261012, 100) if r["step"] == 0]
         obstacles = [r for r in generate_records("obstacle_avoidance", 20261013, 100) if r["step"] == 0]
