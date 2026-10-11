@@ -38,3 +38,17 @@ python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
 ## Required evaluation
 
 Compare full-vocabulary and recurrent-cloud models on the same training/validation/test split, tokenizer, seed set, and training budget. Measure language loss, top-1 token accuracy, cloud recall@k, ambiguity/sense accuracy, actual scored token count, active-neuron count, wall-clock latency, throughput, peak RAM, parameter count, and serialized size. Include random cloud assignments as a negative control. Do not claim a win from sparse masks alone.
+
+
+### Iteration notes: sparse message work and state-aware reactivation
+
+- Message projections now gather active source neurons before the learned message
+  projection, rather than projecting every neuron and masking inactive sources
+  afterward. The graph still accumulates messages into destination neurons, so
+  this is a compute optimization whose benefit must be measured end-to-end.
+- Active-neuron re-selection now combines context affinity with affinity from the
+  just-updated recurrent state. This is intended to reduce loss of useful state
+  between cycles; it is an experimental change, not a proven quality improvement.
+- CI records a three-seed synthetic multi-hop comparison, including longer
+  sequence tests, and publishes summary metrics plus a JSON artifact. These
+  results are screening evidence only; the workload is small and synthetic.
