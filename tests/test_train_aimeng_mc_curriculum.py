@@ -111,6 +111,28 @@ class ParkourTrainingTests(unittest.TestCase):
         self.assertEqual(batch["voxels"].shape[-1], 405)
         self.assertEqual(batch["actions"].shape[0], 2)
 
+    def test_oracle_rule_solves_walking_courses(self):
+        class OracleWalkPolicy(torch.nn.Module):
+            def forward(self, voxels, goals, yaws, hidden=None):
+                batch, steps, _ = goals.shape
+                logits = goals.new_full((batch, steps, len(ACTION_TO_ID)), -10.0)
+                at_goal = (goals[..., 0] == 0) & (goals[..., 2] == 0)
+                logits[..., ACTION_TO_ID["walk_forward"]] = torch.where(at_goal, -10.0, 10.0)
+                logits[..., ACTION_TO_ID["stop"]] = torch.where(at_goal, 10.0, -10.0)
+                next_hidden = hidden if hidden is not None else goals.new_zeros((batch, 1))
+                return logits, next_hidden
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "walking.jsonl"
+            with path.open("w", encoding="utf-8") as handle:
+                for record in generate_records("walking", 555, 100):
+                    handle.write(json.dumps(record) + "\\n")
+            source = EpisodeFile(path)
+            test = EpisodeDataset(source, "test")
+            result = evaluate_rollouts(OracleWalkPolicy(), test, torch.device("cpu"))
+        self.assertEqual(result["episodes"], 10)
+        self.assertEqual(result["success_rate"], 1.0)
+
     def test_rollout_evaluator_returns_episode_success_metric(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "walking.jsonl"
