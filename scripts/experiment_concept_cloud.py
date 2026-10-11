@@ -36,6 +36,10 @@ class ConceptCloudLM(nn.Module):
         ids = torch.as_tensor(cloud_ids, dtype=torch.long)
         if int(ids.min()) < 0:
             raise ValueError("cloud IDs must be non-negative")
+        unique_ids = torch.unique(ids, sorted=True)
+        expected_ids = torch.arange(int(ids.max()) + 1, dtype=torch.long)
+        if not torch.equal(unique_ids, expected_ids):
+            raise ValueError("cloud IDs must be contiguous and every cloud must contain a token")
         self.num_clouds = int(ids.max()) + 1
         if self.num_clouds < 1 or self.num_clouds > vocab_size:
             raise ValueError("invalid number of clouds")
