@@ -144,11 +144,23 @@ def batches(ids: list[int], context: int, batch_size: int, steps: int, seed: int
         y = torch.tensor([ids[s+context] for s in starts], dtype=torch.long)
         yield x, y
 
+def evaluation_starts(sequence_length: int, context: int, limit: int = 512):
+    """Choose deterministic, evenly spaced next-character targets across the full held-out text."""
+    available = sequence_length - context - 1
+    if available < 1:
+        return []
+    count = min(available, max(1, limit))
+    if count == 1:
+        return [0]
+    last = available - 1
+    return [round(i * last / (count - 1)) for i in range(count)]
+
+
 def evaluate(model, ids, context, limit=512):
     model.eval()
-    if len(ids) <= context + 1:
+    starts = evaluation_starts(len(ids), context, limit)
+    if not starts:
         return float("nan")
-    starts = list(range(min(len(ids)-context-1, limit)))
     total = 0.0
     with torch.no_grad():
         for offset in range(0, len(starts), 64):
@@ -183,14 +195,39 @@ def process_memory_mib():
         return rss, "RSS_FALLBACK", peak_rss
     return peak_rss, "PEAK_RSS_FALLBACK", peak_rss
 
+def split_train_validation(source: str, validation_fraction: float = 0.1):
+    """Split at blank-line record boundaries when possible; never split a record mid-example."""
+    records = [part.strip() for part in source.strip().split("\n\n") if part.strip()]
+    if len(records) >= 5:
+        cut = max(1, min(len(records) - 1, int(len(records) * (1.0 - validation_fraction))))
+        return "\n\n".join(records[:cut]), "\n\n".join(records[cut:]), "blank_line_record_boundary"
+    # Generic prose may not have record separators. Keep a documented fallback for it.
+    cut = max(1, min(len(source) - 1, int(len(source) * (1.0 - validation_fraction))))
+    return source[:cut], source[cut:], "character_boundary_fallback"
+
+
 def train(args):
     random.seed(args.seed); torch.manual_seed(args.seed)
     source = Path(args.text).read_text(encoding="utf-8") if args.text else SMOKE_TEXT
     if len(source) < args.context + 20:
         raise ValueError("corpus is too short for the chosen context length")
-    cut = max(args.context + 2, int(len(source) * 0.9))
-    train_text, val_text = source[:cut], source[cut:]
-    stoi, itos = make_vocab(source, args.vocab_size)
+    if args.validation_text:
+        val_text = Path(args.validation_text).read_text(encoding="utf-8")
+        train_text = source
+        split_strategy = "external_validation_file"
+        if len(val_text) < args.context + 2:
+            raise ValueError("validation corpus is too short for the chosen context length")
+        train_records = {part.strip() for part in train_text.split("\n\n") if part.strip()}
+        val_records = {part.strip() for part in val_text.split("\n\n") if part.strip()}
+        overlap = train_records.intersection(val_records)
+        if overlap:
+            raise ValueError(f"training and validation corpora share {len(overlap)} exact record(s)")
+    else:
+        train_text, val_text, split_strategy = split_train_validation(source)
+    if len(train_text) < args.context + 2 or len(val_text) < args.context + 2:
+        raise ValueError("train/validation split is too short for the chosen context length")
+    # Fit vocabulary on training data only. Validation-only characters map to <unk>.
+    stoi, itos = make_vocab(train_text, args.vocab_size)
     train_ids, val_ids = encode(train_text, stoi), encode(val_text, stoi)
     model = DiffusionTextModel(len(itos), args.neurons, args.width, args.active_k, args.fanout, args.max_steps)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
@@ -222,7 +259,7 @@ def train(args):
     checkpoint = {"format":"aimeng-sparse-diffusion-char-v1", "config":vars(args), "stoi":stoi, "itos":itos,
                   "model_state":model.state_dict(), "initial_validation_loss":initial_loss,
                   "final_validation_loss":final_loss, "train_loss_last":last_loss,
-                  "validation_characters":len(val_ids), "source":"user_corpus" if args.text else "built_in_smoke_corpus",
+                  "validation_characters":len(val_ids), "validation_split_strategy":split_strategy, "source":"user_corpus" if args.text else "built_in_smoke_corpus",
                   "warning":"A smoke corpus validates code execution only; it is not evidence of general language ability."}
     torch.save(checkpoint, out_dir / "diffusion_checkpoint.pt")
     current_mib, final_metric, peak_rss_mib = process_memory_mib()
@@ -230,7 +267,7 @@ def train(args):
     report = {"format":"aimeng-diffusion-training-report-v1", "steps_requested":args.steps, "steps_completed":completed_steps,
               "neurons":args.neurons, "hidden_width":args.width, "active_top_k":args.active_k,
               "fanout":args.fanout, "max_diffusion_steps":args.max_steps, "vocab_size":len(itos),
-              "source":checkpoint["source"], "initial_validation_loss":initial_loss,
+              "source":checkpoint["source"], "validation_split_strategy":split_strategy, "initial_validation_loss":initial_loss,
               "final_validation_loss":final_loss, "train_loss_last":last_loss,
               "checkpoint":"diffusion_checkpoint.pt", "elapsed_seconds":round(time.time()-started,2),
               "memory_metric":final_metric, "current_memory_mib":round(current_mib,1),
@@ -270,7 +307,8 @@ def generate_from_checkpoint(checkpoint_path: str, prompt: str, count: int, temp
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--text", type=str, default=None, help="UTF-8 corpus file; omitted means synthetic smoke data only")
+    p.add_argument("--text", type=str, default=None, help="UTF-8 training corpus; omitted means synthetic smoke data only")
+    p.add_argument("--validation-text", type=str, default=None, help="Optional independent UTF-8 validation corpus; exact blank-line records shared with training are rejected")
     p.add_argument("--checkpoint", type=str, default=None, help="load a checkpoint for terminal-only text generation")
     p.add_argument("--prompt", type=str, default="", help="prompt used with --checkpoint")
     p.add_argument("--generate-tokens", type=int, default=120, help="characters to generate with --checkpoint")
