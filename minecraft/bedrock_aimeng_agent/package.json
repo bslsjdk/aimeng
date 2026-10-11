@@ -1,0 +1,8 @@
+{
+  "name": "aimeng-bedrock-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check behavior_pack/scripts/main.js"
+  }
+}
