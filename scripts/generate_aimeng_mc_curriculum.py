@@ -291,8 +291,18 @@ def generate_records(stage_name: str, seed: int, episodes: int) -> Iterable[dict
         used_map_seeds.add(map_seed)
         platforms, obstacles, start, goal, start_yaw, route = make_course(stage, map_seed)
         episode_id = f"{stage.name}-seed-{map_seed}-ep-{episode_index}"
-        # Split by whole episode/map seed, never by adjacent frames.
-        split = "test" if episode_index % 10 == 9 else ("validation" if episode_index % 10 == 8 else "train")
+        # Split by whole episode/map seed, never by adjacent frames:
+        # 75% train, 10% validation, 10% final test, 5% retention audit.
+        # With 1000 episodes this yields 750/100/100/50 episodes respectively.
+        split_slot = episode_index % 20
+        if split_slot in (16, 17):
+            split = "validation"
+        elif split_slot in (18, 19):
+            split = "test"
+        elif split_slot == 15:
+            split = "retention"
+        else:
+            split = "train"
         for step, (state, action, next_state) in enumerate(route):
             x, z, yaw = state
             nx, nz, next_yaw = next_state
