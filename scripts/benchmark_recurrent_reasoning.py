@@ -41,13 +41,20 @@ class GRUBaseline(nn.Module):
         return self.head(hidden[-1])
 
 
-def make_data(n: int, vocab: int, seq_len: int, seed: int, device):
+def make_data(n: int, vocab: int, seq_len: int, seed: int, device, rule: str = "affine"):
+    """Generate sequence-to-state examples under a named compositional rule."""
+    if rule not in ("affine", "additive"):
+        raise ValueError(f"unknown rule: {rule}")
     generator = torch.Generator().manual_seed(seed)
     x = torch.randint(vocab, (n, seq_len), generator=generator)
-    # Sequential composition: every token can affect all later state updates.
+    # Every token affects the final state. The additive rule is a diagnostic
+    # control; affine recurrence is the harder primary task.
     y = torch.zeros(n, dtype=torch.long)
     for position in range(seq_len):
-        y = (3 * y + x[:, position] + 1) % vocab
+        if rule == "affine":
+            y = (3 * y + x[:, position] + 1) % vocab
+        else:
+            y = (y + x[:, position] + 1) % vocab
     return x.to(device), y.to(device)
 
 
@@ -124,14 +131,14 @@ def gru_parameter_count(vocab: int, width: int) -> int:
 
 
 def run_seed(args, seed: int, device: str):
-    train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, seed, device)
-    test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, seed + 100_003, device)
+    train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, seed, device, args.rule)
+    test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, seed + 100_003, device, args.rule)
     # Length extrapolation: train only on seq_len, then test on longer sequences
     # whose answer requires additional state updates not seen during training.
     long_tests = {}
     for extra in (4, 8):
         length = args.seq_len + extra
-        lx, ly = make_data(args.test_size, args.vocab, length, seed + 200_003 + extra, device)
+        lx, ly = make_data(args.test_size, args.vocab, length, seed + 200_003 + extra, device, args.rule)
         long_tests[str(length)] = (lx, ly)
     assignment = [i // (args.vocab // args.clouds) for i in range(args.vocab)]
     cycle_results = {}
@@ -202,6 +209,7 @@ def run_seed(args, seed: int, device: str):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--steps", type=int, default=300)
+    parser.add_argument("--rule", choices=("affine", "additive"), default="affine", help="additive is an easier compositional diagnostic; affine is the primary task")
     parser.add_argument("--train-size", type=int, default=2048)
     parser.add_argument("--test-size", type=int, default=512)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -242,7 +250,8 @@ def main():
     results = {
         "benchmark": "synthetic_multi_hop_modular_state_v1",
         "self_test_status": "PASS" if args.self_test else None,
-        "rule": "state=0; for each token: state=(3*state+token+1)%vocab",
+        "rule": ("state=0; for each token: state=(3*state+token+1)%vocab" if args.rule == "affine" else "state=0; for each token: state=(state+token+1)%vocab"),
+        "rule_id": args.rule,
         "warning": "Synthetic compositional task only; not proof of natural-language reasoning.",
         "generalization_protocol": "Train at configured seq_len; evaluate on same length and seq_len+4/seq_len+8 without further training.",
         "comparison_protocol": "Includes same-width GRU and a GRU width chosen to minimize parameter-count difference from the concept-cloud model; training steps are equal but FLOPs are not guaranteed equal.",
