@@ -66,3 +66,12 @@ For this trainer's dense GRU policy, parameter storage is dominated by the recur
 ## Deployment is a separate milestone
 
 The repository's AIMG packer only understands the existing portable mobile format; it cannot package this new PyTorch architecture as-is. Before this policy can control a phone or a real Bedrock world, implement and test a compatible exporter/runtime controller, map its high-level actions to verified game controls, and measure actual latency, task success, and peak RAM. Do not report synthetic rollout success as live Minecraft parkour ability.
+
+
+## Action imbalance and curriculum action masking
+
+The first 1,000-episode walking benchmark exposed a real problem: raw per-step action accuracy was about 83%, but only 23 of 100 held-out episodes reached the goal and stopped. The model often learned the majority action (walking) better than the rare but essential stop decision. Expanding 1,024 to 2,048 hidden units did not by itself solve that failure.
+
+The trainer now uses inverse-square-root class weights for actions that occur in the training split and reports per-action recall. Checkpoint selection is based primarily on **closed-loop validation episode success**, with teacher-action accuracy only used to break ties. The rollout evaluator also masks actions not yet unlocked by the current curriculum stage. For example, the walking policy can choose only `walk_forward` or `stop`; turning is unlocked later, and jump variants are introduced at their corresponding stages. This makes the action set grow with the curriculum rather than letting randomly initialized late-stage action heads disrupt basic walking.
+
+A follow-up 1,000-episode benchmark is being run with these corrections. The earlier 23% result remains the honest baseline until that run completes. No stage advances merely because action accuracy or hidden-unit count rose.
