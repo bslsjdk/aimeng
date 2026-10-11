@@ -43,7 +43,9 @@ closely matches the concept-cloud parameter count. All use the same optimizer. T
 configured sequence length only. Evaluation reports both held-out examples at
 the training length and extrapolation to sequences 4 and 8 tokens longer, with
 no further training. It also reports router recall, throughput, parameter
-count, training loss movement, and wall-clock training time as JSON.
+count, training loss movement, and wall-clock training time as JSON. It also
+reports mean and population standard deviation across seeds, while preserving
+each seed result for inspection.
 
 ## Interpretation rules
 
