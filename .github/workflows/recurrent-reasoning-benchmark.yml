@@ -1,0 +1,76 @@
+name: Recurrent reasoning benchmark smoke test
+
+on:
+  pull_request:
+    paths:
+      - "scripts/benchmark_recurrent_reasoning.py"
+      - "scripts/experiment_recurrent_concept_cloud.py"
+      - "tests/test_concept_cloud.py"
+      - "tests/test_recurrent_concept_cloud.py"
+      - "tests/test_recurrent_reasoning_benchmark.py"
+      - ".github/workflows/recurrent-reasoning-benchmark.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU-only PyTorch
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Check Python syntax
+        run: python -m py_compile scripts/benchmark_recurrent_reasoning.py scripts/experiment_recurrent_concept_cloud.py
+      - name: Run multi-hop benchmark self-test
+        run: python scripts/benchmark_recurrent_reasoning.py --self-test
+      - name: Run benchmark target tests
+        run: python -m unittest tests.test_recurrent_reasoning_benchmark
+      - name: Run concept-cloud unit tests
+        run: python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
+      - name: Run 10k-step repeated-seed multi-hop benchmark
+        run: |
+          set -o pipefail
+          python scripts/benchmark_recurrent_reasoning.py --steps 10000 --train-size 4096 --test-size 1024 --batch-size 64 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee recurrent-reasoning-results.json
+      - name: Run additive-rule diagnostic benchmark
+        run: |
+          set -o pipefail
+          python scripts/benchmark_recurrent_reasoning.py --rule additive --steps 5000 --train-size 4096 --test-size 1024 --batch-size 64 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee additive-reasoning-results.json
+      - name: Write benchmark summary
+        if: always() && hashFiles('recurrent-reasoning-results.json') != ''
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("recurrent-reasoning-results.json").read_text())
+          lines = ["## Multi-hop benchmark summary", "", "| Model | Accuracy (mean ± population SD) | Throughput examples/s (mean) |", "|---|---:|---:|"]
+          keys = [("Concept cloud, 1 cycle", "concept_cloud_cycles_1"), ("Concept cloud, 2 cycles", "concept_cloud_cycles_2"), ("Concept cloud, 3 cycles", "concept_cloud_cycles_3"), ("Concept cloud, 4 cycles", "concept_cloud_cycles_4"), ("GRU, same width", "gru_same_width"), ("GRU, parameter matched", "gru_parameter_matched")]
+          for label, key in keys:
+              item = data["summary_across_seeds"][key]
+              a = item["same_length_accuracy"]
+              t = item["same_length_throughput"]
+              lines.append(f"| {label} | {a['mean']:.4f} ± {a['population_stddev']:.4f} | {t['mean']:.1f} |")
+          lines += ["", "Long-sequence accuracy:", "", "| Model | Length 12 | Length 16 |", "|---|---:|---:|"]
+          for label, key in keys:
+              item = data["summary_across_seeds"][key]["longer_sequence_accuracy"]
+              lines.append(f"| {label} | {item['12']['mean']:.4f} | {item['16']['mean']:.4f} |")
+          Path("summary.md").write_text("\\n".join(lines) + "\\n")
+          print(Path("summary.md").read_text())
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(Path("summary.md").read_text())
+          PY
+      - name: Upload benchmark JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: recurrent-reasoning-results
+          path: |
+            recurrent-reasoning-results.json
+            additive-reasoning-results.json
+          if-no-files-found: error

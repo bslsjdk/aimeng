@@ -1,0 +1,300 @@
+"""Multi-hop reasoning benchmark for AIMENG recurrent concept-cloud networks.
+
+This benchmark asks models to compute a rolling modular state over the ENTIRE
+input sequence: state <- (3 * state + token + 1) % vocab. It is deliberately
+harder than successor-token and last-two-token sum tasks because early tokens
+must influence the final answer through several dependent updates.
+
+It is a synthetic compositional-reasoning probe, not a natural-language claim.
+It compares the concept-cloud model at 1/2/3/4 recurrent cycles with a GRU
+baseline using the same generated examples, seed, width, and optimizer steps.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import statistics
+import time
+import sys
+from pathlib import Path
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+# Direct script execution sets sys.path[0] to scripts/, not the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.experiment_recurrent_concept_cloud import RecurrentConceptCloudNet
+
+
+class GRUBaseline(nn.Module):
+    def __init__(self, vocab: int, width: int):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab, width)
+        self.gru = nn.GRU(width, width, batch_first=True)
+        self.head = nn.Linear(width, vocab)
+
+    def forward(self, x):
+        _, hidden = self.gru(self.embedding(x))
+        return self.head(hidden[-1])
+
+
+def make_data(n: int, vocab: int, seq_len: int, seed: int, device, rule: str = "affine"):
+    """Generate sequence-to-state examples under a named compositional rule."""
+    if rule not in ("affine", "additive"):
+        raise ValueError(f"unknown rule: {rule}")
+    generator = torch.Generator().manual_seed(seed)
+    x = torch.randint(vocab, (n, seq_len), generator=generator)
+    # Every token affects the final state. The additive rule is a diagnostic
+    # control; affine recurrence is the harder primary task.
+    y = torch.zeros(n, dtype=torch.long)
+    for position in range(seq_len):
+        if rule == "affine":
+            y = (3 * y + x[:, position] + 1) % vocab
+        else:
+            y = (y + x[:, position] + 1) % vocab
+    return x.to(device), y.to(device)
+
+
+def train(model, x, y, steps: int, batch_size: int, seed: int, cloud: bool):
+    rng = random.Random(seed)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    model.train()
+    first, last = [], []
+    started = time.perf_counter()
+    for step in range(steps):
+        indices = [rng.randrange(len(x)) for _ in range(batch_size)]
+        xb, yb = x[indices], y[indices]
+        optimizer.zero_grad(set_to_none=True)
+        if cloud:
+            output = model(xb, target=yb)
+            loss = model.loss(output, yb)["loss"]
+        else:
+            loss = F.cross_entropy(model(xb), yb)
+        if not torch.isfinite(loss):
+            raise RuntimeError(f"non-finite loss at step {step}")
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        value = float(loss.detach())
+        if step < min(20, steps):
+            first.append(value)
+        if step >= max(0, steps - min(20, steps)):
+            last.append(value)
+    return {
+        "steps": steps,
+        "initial_mean_loss": sum(first) / max(1, len(first)),
+        "final_mean_loss": sum(last) / max(1, len(last)),
+        "training_seconds": time.perf_counter() - started,
+    }
+
+
+def evaluate_cloud(model, x, y, batch_size: int, cycles: int):
+    model.eval()
+    correct = routed = count = 0
+    start = time.perf_counter()
+    with torch.no_grad():
+        for lo in range(0, len(x), batch_size):
+            xb, yb = x[lo:lo + batch_size], y[lo:lo + batch_size]
+            output = model(xb, cycles=cycles)
+            hit = (model.token_cloud[yb, None] == output["selected_clouds"]).any(-1)
+            prediction = output["logits"].argmax(-1)
+            correct += int(((prediction == yb) & hit).sum())
+            routed += int(hit.sum())
+            count += len(yb)
+    elapsed = max(time.perf_counter() - start, 1e-9)
+    return {
+        "accuracy": correct / max(count, 1),
+        "router_recall_at_k": routed / max(count, 1),
+        "examples_per_second": count / elapsed,
+    }
+
+
+def evaluate_gru(model, x, y, batch_size: int):
+    model.eval()
+    correct = count = 0
+    start = time.perf_counter()
+    with torch.no_grad():
+        for lo in range(0, len(x), batch_size):
+            xb, yb = x[lo:lo + batch_size], y[lo:lo + batch_size]
+            correct += int((model(xb).argmax(-1) == yb).sum())
+            count += len(yb)
+    elapsed = max(time.perf_counter() - start, 1e-9)
+    return {"accuracy": correct / max(count, 1), "examples_per_second": count / elapsed}
+
+
+def gru_parameter_count(vocab: int, width: int) -> int:
+    # Embedding + one-layer GRU (two bias vectors) + vocabulary projection.
+    return vocab * width + 6 * width * width + 6 * width + vocab * width + vocab
+
+
+def run_seed(args, seed: int, device: str):
+    train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, seed, device, args.rule)
+    test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, seed + 100_003, device, args.rule)
+    # Length extrapolation: train only on seq_len, then test on longer sequences
+    # whose answer requires additional state updates not seen during training.
+    long_tests = {}
+    for extra in (4, 8):
+        length = args.seq_len + extra
+        lx, ly = make_data(args.test_size, args.vocab, length, seed + 200_003 + extra, device, args.rule)
+        long_tests[str(length)] = (lx, ly)
+    assignment = [i // (args.vocab // args.clouds) for i in range(args.vocab)]
+    cycle_results = {}
+    cloud_train_results = {}
+    # Train a separately initialized model for each cycle count so the comparison
+    # does not give one setting weights trained under a different recurrence depth.
+    for cycles in (1, 2, 3, 4):
+        torch.manual_seed(seed)
+        cloud = RecurrentConceptCloudNet(
+            args.vocab, assignment, width=args.width, neurons=args.neurons,
+            active_k=args.active_k, candidate_clouds=args.candidate_clouds,
+            cycles=cycles,
+        ).to(device)
+        cloud_train_results[str(cycles)] = train(
+            cloud, train_x, train_y, args.steps, args.batch_size, seed, cloud=True
+        )
+        cycle_results[str(cycles)] = {
+            "parameters": sum(p.numel() for p in cloud.parameters()),
+            "train": cloud_train_results[str(cycles)],
+            "test_same_length": evaluate_cloud(cloud, test_x, test_y, args.batch_size, cycles),
+            "test_longer_sequences": {
+                length: evaluate_cloud(cloud, lx, ly, args.batch_size, cycles)
+                for length, (lx, ly) in long_tests.items()
+            },
+        }
+    torch.manual_seed(seed)
+    baseline = GRUBaseline(args.vocab, args.width).to(device)
+    baseline_train = train(
+        baseline, train_x, train_y, args.steps, args.batch_size, seed, cloud=False
+    )
+    cloud_parameter_count = next(iter(cycle_results.values()))["parameters"]
+    matched_width = min(
+        range(max(4, args.width // 2), max(args.width * 3, 32) + 1),
+        key=lambda width: (abs(gru_parameter_count(args.vocab, width) - cloud_parameter_count), width),
+    )
+    torch.manual_seed(seed)
+    matched_gru = GRUBaseline(args.vocab, matched_width).to(device)
+    matched_gru_train = train(
+        matched_gru, train_x, train_y, args.steps, args.batch_size, seed, cloud=False
+    )
+    return {
+        "seed": seed,
+        "concept_cloud_by_cycles": cycle_results,
+        "gru_same_width": {
+            "parameters": sum(p.numel() for p in baseline.parameters()),
+            "width": args.width,
+            "train": baseline_train,
+            "test_same_length": evaluate_gru(baseline, test_x, test_y, args.batch_size),
+            "test_longer_sequences": {
+                length: evaluate_gru(baseline, lx, ly, args.batch_size)
+                for length, (lx, ly) in long_tests.items()
+            },
+        },
+        "gru_parameter_matched": {
+            "parameters": sum(p.numel() for p in matched_gru.parameters()),
+            "width": matched_width,
+            "parameter_difference_vs_concept_cloud": sum(p.numel() for p in matched_gru.parameters()) - cloud_parameter_count,
+            "train": matched_gru_train,
+            "test_same_length": evaluate_gru(matched_gru, test_x, test_y, args.batch_size),
+            "test_longer_sequences": {
+                length: evaluate_gru(matched_gru, lx, ly, args.batch_size)
+                for length, (lx, ly) in long_tests.items()
+            },
+        },
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--steps", type=int, default=300)
+    parser.add_argument("--rule", choices=("affine", "additive"), default="affine", help="additive is an easier compositional diagnostic; affine is the primary task")
+    parser.add_argument("--train-size", type=int, default=2048)
+    parser.add_argument("--test-size", type=int, default=512)
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--vocab", type=int, default=32)
+    parser.add_argument("--clouds", type=int, default=8)
+    parser.add_argument("--seq-len", type=int, default=8)
+    parser.add_argument("--width", type=int, default=16)
+    parser.add_argument("--neurons", type=int, default=48)
+    parser.add_argument("--active-k", type=int, default=6)
+    parser.add_argument("--candidate-clouds", type=int, default=3)
+    parser.add_argument("--seeds", default="17,23,41")
+    parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.steps < 1 or args.batch_size < 1 or args.train_size < 1 or args.test_size < 1:
+        parser.error("steps, batch-size, train-size and test-size must be positive")
+    if args.clouds < 1 or args.vocab < 8 or args.vocab % args.clouds:
+        parser.error("clouds must be >=1; vocab must be >=8 and divisible by clouds")
+    if args.seq_len < 3:
+        parser.error("seq-len must be >=3 for a multi-hop task")
+    if args.threads < 1:
+        parser.error("threads must be >=1")
+    torch.set_num_threads(args.threads)
+    device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
+    if device == "cuda" and not torch.cuda.is_available():
+        parser.error("CUDA requested but unavailable")
+    if args.self_test:
+        # Keep the self-test fast enough for CI and constrained terminals.
+        args.steps = min(args.steps, 3)
+        args.train_size = min(args.train_size, 64)
+        args.test_size = min(args.test_size, 32)
+        args.batch_size = min(args.batch_size, 16)
+        args.seq_len = max(args.seq_len, 3)
+    seeds = [17] if args.self_test else [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+    if not seeds:
+        parser.error("provide at least one seed")
+    results = {
+        "benchmark": "synthetic_multi_hop_modular_state_v1",
+        "self_test_status": "PASS" if args.self_test else None,
+        "rule": ("state=0; for each token: state=(3*state+token+1)%vocab" if args.rule == "affine" else "state=0; for each token: state=(state+token+1)%vocab"),
+        "rule_id": args.rule,
+        "warning": "Synthetic compositional task only; not proof of natural-language reasoning.",
+        "generalization_protocol": "Train at configured seq_len; evaluate on same length and seq_len+4/seq_len+8 without further training.",
+        "comparison_protocol": "Includes same-width GRU and a GRU width chosen to minimize parameter-count difference from the concept-cloud model; training steps are equal but FLOPs are not guaranteed equal.",
+        "config": vars(args) | {"device_resolved": device, "seeds_used": seeds},
+        "runs": [],
+    }
+    for seed in seeds:
+        results["runs"].append(run_seed(args, seed, device))
+
+    # Aggregate repeated seeds so a single lucky initialization is not mistaken
+    # for a general result. Keep the per-seed records above for auditability.
+    def stats(values):
+        return {
+            "mean": statistics.mean(values),
+            "population_stddev": statistics.pstdev(values),
+            "n_seeds": len(values),
+        }
+
+    summary = {}
+    for cycles in ("1", "2", "3", "4"):
+        entries = [run["concept_cloud_by_cycles"][cycles] for run in results["runs"]]
+        summary[f"concept_cloud_cycles_{cycles}"] = {
+            "same_length_accuracy": stats([e["test_same_length"]["accuracy"] for e in entries]),
+            "same_length_throughput": stats([e["test_same_length"]["examples_per_second"] for e in entries]),
+            "router_recall": stats([e["test_same_length"]["router_recall_at_k"] for e in entries]),
+            "longer_sequence_accuracy": {
+                length: stats([e["test_longer_sequences"][length]["accuracy"] for e in entries])
+                for length in entries[0]["test_longer_sequences"]
+            },
+        }
+    for model_key in ("gru_same_width", "gru_parameter_matched"):
+        entries = [run[model_key] for run in results["runs"]]
+        summary[model_key] = {
+            "same_length_accuracy": stats([e["test_same_length"]["accuracy"] for e in entries]),
+            "same_length_throughput": stats([e["test_same_length"]["examples_per_second"] for e in entries]),
+            "longer_sequence_accuracy": {
+                length: stats([e["test_longer_sequences"][length]["accuracy"] for e in entries])
+                for length in entries[0]["test_longer_sequences"]
+            },
+        }
+    results["summary_across_seeds"] = summary
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

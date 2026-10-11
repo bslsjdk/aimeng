@@ -1,0 +1,49 @@
+name: Concept cloud inference and training profile
+
+on:
+  pull_request:
+    paths:
+      - "scripts/profile_recurrent_concept_cloud.py"
+      - "scripts/experiment_recurrent_concept_cloud.py"
+      - ".github/workflows/concept-cloud-profile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Check syntax
+        run: python -m py_compile scripts/profile_recurrent_concept_cloud.py scripts/experiment_recurrent_concept_cloud.py
+      - name: Profile training and inference across neuron budgets
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          for config in "48 6" "96 6" "192 6" "192 12" "192 24"; do
+            read -r neurons active_k <<< "$config"
+            for mode in inference training; do
+              out="profile-${mode}-n${neurons}-k${active_k}.json"
+              echo "Running mode=$mode neurons=$neurons active_k=$active_k"
+              python scripts/profile_recurrent_concept_cloud.py \
+                --mode "$mode" --batch-size 64 --seq-len 8 \
+                --warmup 10 --iterations 30 --threads 1 --cycles 4 \
+                --neurons "$neurons" --active-k "$active_k" | tee "$out"
+            done
+          done
+      - name: Upload profile results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-cloud-training-inference-profiles
+          path: profile-*.json
+          if-no-files-found: warn
