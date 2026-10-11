@@ -30,3 +30,13 @@ The hidden state is updated through repeated graph message passing on a bidirect
 Text prediction is character-by-character for this first baseline. Internal diffusion runs multiple rounds before a prediction; this does not magically remove sequence dependence from generating arbitrary text. The learned halt distribution is trained with a small expected-step penalty, while runtime early stopping additionally requires a high halt score and a small state delta. Evaluate both output quality and steps used before relying on early stopping.
 
 The built-in CI run is only a smoke test. A lower validation loss on a tiny repeated corpus does not demonstrate general language competence or useful reasoning. Terminal generation is provided only to validate checkpoint loading and text output; use a real, quality-controlled corpus before judging language quality.
+
+## Reproducible CPU inference benchmark
+
+Run several configurations with identical corpus, seed, context, sample count, warmup, and thread count:
+
+    python scripts/train_diffusion_text.py --benchmark --neurons 64 --width 32 --active-k 4 --fanout 8 --max-steps 4 --threads 1 --benchmark-samples 256 --warmup 16 --output runs/bench-64
+    python scripts/train_diffusion_text.py --benchmark --neurons 128 --width 32 --active-k 8 --fanout 8 --max-steps 6 --threads 1 --benchmark-samples 256 --warmup 16 --output runs/bench-128
+    python scripts/train_diffusion_text.py --benchmark --neurons 256 --width 32 --active-k 8 --fanout 8 --max-steps 6 --threads 1 --benchmark-samples 256 --warmup 16 --output runs/bench-256
+
+Supply the same real corpus with \`--text data/corpus.txt\` to benchmark that corpus. Each run writes \`benchmark.json\`, including mean/median/p95 latency, samples per second, next-character top-1 accuracy, expected steps and memory observations. Run each configuration at least three times and compare medians. The default built-in corpus is a code-path smoke test, not evidence of task ability. For a valid architecture comparison, benchmark trained checkpoints on the same independent task suite as a separate evaluation; untrained-model accuracy here is only a wiring/sanity metric.
