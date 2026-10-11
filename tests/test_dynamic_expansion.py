@@ -22,6 +22,8 @@ class ExpandableGRUTests(unittest.TestCase):
         model = ExpandableGRU(4, 4, 2)
         widened = model.expand_hidden(8, seed=5)
         optimizer = torch.optim.SGD(widened.parameters(), lr=0.05)
+        new_rows = torch.cat([widened.cell.weight_ih[4:8], widened.cell.weight_ih[12:16], widened.cell.weight_ih[20:24]])
+        initial_new_rows = new_rows.detach().clone()
         x = torch.randn(3, 5, 4)
         target = torch.randn(3, 5, 2)
         for _ in range(3):
@@ -31,7 +33,8 @@ class ExpandableGRUTests(unittest.TestCase):
             loss.backward()
             optimizer.step()
         self.assertGreater(widened.readout.weight[:, 4:].abs().sum().item(), 0.0)
-        self.assertGreater(widened.cell.weight_ih[8:].abs().sum().item(), 0.0)
+        new_rows_after = torch.cat([widened.cell.weight_ih[4:8], widened.cell.weight_ih[12:16], widened.cell.weight_ih[20:24]])
+        self.assertGreater((new_rows_after - initial_new_rows).abs().sum().item(), 0.0)
 
     def test_old_hidden_state_can_be_padded(self):
         model = ExpandableGRU(2, 3, 1)
@@ -55,6 +58,7 @@ class ExpandableGRUTests(unittest.TestCase):
     def test_capacity_monitor_expands_after_plateau(self):
         monitor = CapacityMonitor(patience=2, target_score=0.95)
         self.assertFalse(monitor.update(0.70, 0.68, 64).expand)
+        self.assertFalse(monitor.update(0.70, 0.69, 64).expand)
         decision = monitor.update(0.70, 0.69, 64)
         self.assertTrue(decision.expand)
         self.assertEqual(decision.suggested_size, 128)
