@@ -36,6 +36,25 @@ ENCODER_WIDTH = 128
 MAX_ROLLOUT_STEPS = 64
 
 
+def allowed_actions_for_stage(stage_name: str) -> tuple[str, ...]:
+    """Expose only mechanics unlocked by the current curriculum stage."""
+    stage = STAGE_BY_NAME[stage_name]
+    allowed = ["walk_forward", "stop"]
+    if stage.index >= STAGE_BY_NAME["turning"].index:
+        allowed.extend(["turn_left", "turn_right"])
+    if stage.index >= STAGE_BY_NAME["small_jump"].index:
+        allowed.append("jump_forward")
+    if stage.index >= STAGE_BY_NAME["gap_jump"].index:
+        allowed.append("gap_jump_forward")
+    if stage.index >= STAGE_BY_NAME["rotating_jump"].index:
+        allowed.extend(["rotating_jump_left", "rotating_jump_right"])
+    if stage.index >= STAGE_BY_NAME["super_jump"].index:
+        allowed.append("super_jump_forward")
+    if stage.index >= STAGE_BY_NAME["double_jump"].index:
+        allowed.append("double_jump_forward")
+    return tuple(allowed)
+
+
 class EpisodeFile:
     """Byte-offset index for JSONL episodes; keeps only per-episode metadata in RAM."""
 
@@ -352,7 +371,12 @@ def evaluate_rollouts(
                 goals = torch.tensor(observation["goal_offset"], dtype=torch.float32, device=device).view(1, 1, 3)
                 yaws = torch.tensor([[yaw]], dtype=torch.long, device=device)
                 logits, hidden = model(voxels, goals, yaws, hidden)
-                action = ACTIONS[int(logits[0, 0].argmax().item())]
+                masked_logits = logits[0, 0].clone()
+                allowed_ids = {ACTION_TO_ID[name] for name in allowed_actions_for_stage(stage.name)}
+                for action_id in range(len(ACTIONS)):
+                    if action_id not in allowed_ids:
+                        masked_logits[action_id] = float("-inf")
+                action = ACTIONS[int(masked_logits.argmax().item())]
                 if action == "stop":
                     solved = state[:2] == goal
                     break
