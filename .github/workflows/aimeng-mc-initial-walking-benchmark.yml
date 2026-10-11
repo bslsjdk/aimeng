@@ -9,7 +9,7 @@ on:
 
 jobs:
   initial-walking:
-    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-rebalanced-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-stage-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-diverse-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walk-train-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-geometry-skip-benchmark]')
+    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-rebalanced-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-stage-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-diverse-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walk-train-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-geometry-skip-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-geometry-head-benchmark]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aimeng-mc-walking-geometry-skip-benchmark
+          name: aimeng-mc-walking-geometry-head-benchmark
           path: |
             checkpoints/
             reports/
