@@ -127,7 +127,12 @@ class RecurrentConceptCloudNet(nn.Module):
                 device=context.device, dtype=ctx.dtype,
             )
             for b in range(batch):
-                chosen = candidate_ids[b].unique()
+                chosen = candidate_ids[b]
+                if target is not None:
+                    # Teacher-force the gold cloud into token scoring during training;
+                    # router recall is measured separately from its own top-k guesses.
+                    chosen = torch.cat([chosen, self.token_cloud[target[b]].view(1)])
+                chosen = chosen.unique()
                 token_ids = torch.cat([self.cloud_members[c][self.cloud_members[c] >= 0] for c in chosen])
                 token_ids = token_ids.unique()
                 scores = self.embedding(token_ids) @ (self.cloud_query(pooled[b] + ctx[b])) / math.sqrt(self.width)
