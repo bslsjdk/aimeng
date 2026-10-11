@@ -17,11 +17,15 @@ import json
 import random
 import statistics
 import time
+import sys
+from pathlib import Path
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+# Direct script execution sets sys.path[0] to scripts/, not the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.experiment_recurrent_concept_cloud import RecurrentConceptCloudNet
 
 
