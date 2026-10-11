@@ -175,21 +175,21 @@ class RecurrentConceptCloudNet(nn.Module):
             # the learned projection. The previous implementation projected all
             # neurons and masked most messages afterward, wasting work whenever
             # active_k << neurons.
-            source_ids = active_mask.nonzero(as_tuple=False)
-            source_batch = source_ids[:, 0]
-            source_neuron = source_ids[:, 1]
-            source_state = state[source_batch, source_neuron]
-            source_neighbors = self.neighbors[source_neuron]
+            source_state = state.gather(
+                1, active_ids.unsqueeze(-1).expand(-1, -1, self.width)
+            )
+            source_neighbors = self.neighbors[active_ids]
             messages = self.message(
-                source_state[:, None, :].expand(-1, self.fanout, -1)
+                source_state.unsqueeze(2).expand(-1, -1, self.fanout, -1)
             )
             next_state = torch.zeros_like(state)
             next_count = torch.zeros(
                 batch, self.neurons, 1, device=context.device, dtype=ctx.dtype
             )
-            flat_dst = (
-                source_neighbors + source_batch[:, None] * self.neurons
-            ).reshape(-1)
+            batch_offsets = (
+                torch.arange(batch, device=context.device) * self.neurons
+            )[:, None, None]
+            flat_dst = (source_neighbors + batch_offsets).reshape(-1)
             flat_msg = messages.reshape(-1, self.width)
             next_state.view(batch * self.neurons, self.width).index_add_(
                 0, flat_dst, flat_msg
@@ -223,6 +223,7 @@ class RecurrentConceptCloudNet(nn.Module):
             next_mask.scatter_(1, next_ids, True)
             state = revised * next_mask.unsqueeze(-1)
             active_mask = next_mask
+            active_ids = next_ids
 
         # Final cycle is the refined prediction. During training the target may
         # be unreachable if its cloud is not proposed, so report that explicitly.
