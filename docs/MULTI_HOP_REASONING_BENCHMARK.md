@@ -53,10 +53,7 @@ each seed result for inspection.
   reported separately.
 - More cycles are not automatically better. Compare accuracy gains against
   end-to-end throughput and training time.
-- During training, the model currently adds the gold target cloud to token
-  scoring; at evaluation it must route without that hint. This teacher-forcing
-  mismatch can make training easier than inference, so route-free accuracy and
-  router recall are critical and should be improved in a later training revision.
+- Training and evaluation both score only router-proposed clouds; the gold target cloud is never injected into token scoring. Token loss is applied only to examples where the target cloud is routed, while router cross-entropy continues to train on every example. This avoids answer-cloud leakage, but early token-head learning may be slower while routing is poor.
 - The GRU is a useful baseline, not a straw man. Same examples and update steps
   do not guarantee identical FLOPs, so this is not yet a matched-compute result.
   The parameter-matched GRU reduces parameter-count unfairness, while the
