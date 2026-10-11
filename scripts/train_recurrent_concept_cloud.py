@@ -33,12 +33,12 @@ class GRUBaseline(nn.Module):
         return self.head(h[-1])
 
 
-def make_data(n: int, vocab: int, seq_len: int, seed: int, device):
+def make_data(n: int, vocab: int, seq_len: int, seed: int, device, task: str):
     g = torch.Generator().manual_seed(seed)
     x = torch.randint(vocab, (n, seq_len), generator=g)
     # A deterministic, context-dependent next-token rule. The same split and
     # generated examples are used for both systems.
-    y = (x[:, -1] + x[:, -2]) % vocab
+    y = (x[:, -1] + 1) % vocab if task == "successor" else (x[:, -1] + x[:, -2]) % vocab
     return x.to(device), y.to(device)
 
 
@@ -136,6 +136,7 @@ def main():
     p.add_argument("--candidate-clouds", type=int, default=3)
     p.add_argument("--cycles", type=int, default=3)
     p.add_argument("--seq-len", type=int, default=6)
+    p.add_argument("--task", choices=["successor", "context-sum"], default="successor")
     p.add_argument("--seed", type=int, default=17)
     p.add_argument("--threads", type=int, default=1)
     p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "auto"])
@@ -150,8 +151,8 @@ def main():
         p.error("CUDA requested but unavailable")
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, args.seed, device)
-    test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, args.seed + 1, device)
+    train_x, train_y = make_data(args.train_size, args.vocab, args.seq_len, args.seed, device, args.task)
+    test_x, test_y = make_data(args.test_size, args.vocab, args.seq_len, args.seed + 1, device, args.task)
     assignment = [i // (args.vocab // args.clouds) for i in range(args.vocab)]
     cloud = RecurrentConceptCloudNet(
         args.vocab, assignment, width=args.width, neurons=args.neurons,
@@ -164,7 +165,7 @@ def main():
     cloud_train = train_one(cloud, train_x, train_y, args.steps, args.batch_size, 1e-3, args.seed, True)
     base_train = train_one(baseline, train_x, train_y, args.steps, args.batch_size, 1e-3, args.seed, False)
     results = {
-        "benchmark": "synthetic_context_sum_next_token_v1",
+        "benchmark": f"synthetic_{args.task}_next_token_v1",
         "warning": "Sanity benchmark only; does not prove language ability or general superiority.",
         "config": vars(args) | {"device_resolved": device},
         "recurrent_concept_cloud": {
