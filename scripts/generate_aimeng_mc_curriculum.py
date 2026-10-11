@@ -173,9 +173,26 @@ def make_course(stage: Stage, seed: int):
             if rng.random() < stage.obstacle_rate:
                 obstacles[pos] = rng.choice((1, 1, 2))
     elif stage.name == "walking":
-        distance = rng.randrange(2, 6)
-        goal = (start_x + distance, start_z)
-        start_yaw = 1
+        # Vary the starting position and heading even in the easiest stage. This preserves
+        # the "walk straight, then stop" mechanic while preventing 1000 seeds from becoming
+        # near-duplicates of the same east-facing four-step route.
+        start = (
+            rng.randrange(2, WORLD_SIZE - 2),
+            rng.randrange(2, WORLD_SIZE - 2),
+        )
+        start_x, start_z = start
+        start_yaw = rng.randrange(4)
+        dx, dz = DIRS[start_yaw]
+        if dx > 0:
+            max_forward = WORLD_SIZE - 1 - start_x
+        elif dx < 0:
+            max_forward = start_x
+        elif dz > 0:
+            max_forward = WORLD_SIZE - 1 - start_z
+        else:
+            max_forward = start_z
+        distance = rng.randrange(1, min(7, max_forward) + 1)
+        goal = (start_x + dx * distance, start_z + dz * distance)
     elif stage.name == "turning":
         goal = (start_x + 4, start_z - 3)
         start_yaw = 1
