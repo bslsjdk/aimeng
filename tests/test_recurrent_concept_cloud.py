@@ -51,6 +51,24 @@ class RecurrentConceptCloudTests(unittest.TestCase):
         self.assertEqual(tuple(out["target_routed"].shape), (2,))
         self.assertTrue(out["target_routed"].dtype == torch.bool)
 
+    def test_training_does_not_inject_unrouted_gold_cloud(self):
+        # Force the router to choose clouds 0 and 1. Targets are in clouds 2
+        # and 3, so their token logits must remain masked during training too.
+        with torch.no_grad():
+            self.model.cloud_head.weight.zero_()
+            self.model.cloud_head.bias.copy_(torch.tensor([100.0, 90.0, 0.0, -1.0]))
+        self.model.candidate_clouds = 2
+        x = torch.randint(0, 16, (2, 5))
+        y = torch.tensor([8, 13])
+        out = self.model(x, target=y)
+        self.assertFalse(out["target_routed"].any())
+        floor = torch.finfo(out["logits"].dtype).min
+        self.assertTrue((out["logits"][torch.arange(2), y] == floor).all())
+        losses = self.model.loss(out, y)
+        self.assertTrue(torch.isfinite(losses["loss"]))
+        losses["loss"].backward()
+        self.assertTrue(torch.isfinite(self.model.cloud_head.weight.grad).all())
+
 
 if __name__ == "__main__":
     unittest.main()
