@@ -171,6 +171,15 @@ def main() -> int:
     parser.add_argument("--obstacle-rate", type=float, default=0.18, help="solid obstacle probability")
     parser.add_argument("--output", type=Path, default=Path("aimeng_mc_train.jsonl"))
     args = parser.parse_args()
+    if args.self_test:
+        records = list(generate_records(123, 5))
+        assert records, "generator produced no records"
+        assert all(len(r["observation"]["voxels"]) == GRID_X * GRID_Y * GRID_Z for r in records)
+        assert all(r["teacher_action"]["action"] in ACTIONS for r in records)
+        assert all(r["labels"]["at_goal"] == (r["teacher_action"]["action"] == "stop") for r in records)
+        assert records == list(generate_records(123, 5)), "same seed did not reproduce identical records"
+        print(json.dumps({"self_test": "passed", "records_checked": len(records), "voxel_cells_per_record": GRID_X * GRID_Y * GRID_Z}))
+        return 0
     if args.episodes < 1:
         parser.error("--episodes must be >= 1")
     if not 0.0 <= args.obstacle_rate <= 0.45:
