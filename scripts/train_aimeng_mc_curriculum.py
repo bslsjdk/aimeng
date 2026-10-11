@@ -455,7 +455,7 @@ def main() -> int:
     parser.add_argument("--max-hidden-size", type=int, default=2048)
     parser.add_argument("--expand-patience", type=int, default=3)
     parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument("--learning-rate", type=float, default=0.0003)
+    parser.add_argument("--learning-rate", type=float, default=0.0001)
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=1)
     args = parser.parse_args()
@@ -540,6 +540,12 @@ def main() -> int:
     else:
         model = ParkourGRUPolicy(args.hidden_size).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    # The previous run showed oscillating left/right recall at 3e-4. Start more
+    # conservatively and reduce LR when validation loss stops improving.
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=2, threshold=0.001,
+        threshold_mode="rel", min_lr=1e-5,
+    )
     class_weights = compute_class_weights([current_file, *replay_files], device)
 
     best_val_accuracy = -1.0
@@ -562,6 +568,7 @@ def main() -> int:
         current_train_macro_recall = sum(current_train_recalls.values()) / max(1, len(current_train_recalls))
         val_macro_recall = sum(val_recalls.values()) / max(1, len(val_recalls))
         val_rollout = evaluate_rollouts(model, val_dataset, device)
+        scheduler.step(val_loss)
         improved = (
             val_rollout["success_rate"] > best_val_episode_success + 1e-9
             or (abs(val_rollout["success_rate"] - best_val_episode_success) <= 1e-9
@@ -591,6 +598,7 @@ def main() -> int:
             "validation_episode_successes": val_rollout["successes"],
             "validation_rollout_episodes": val_rollout["episodes"],
             "hidden_size": model.hidden_size,
+            "learning_rate": optimizer.param_groups[0]["lr"],
         })
         print(json.dumps(history[-1]), flush=True)
 
@@ -606,6 +614,10 @@ def main() -> int:
             new_size = min(old_size * 2, args.max_hidden_size)
             model = model.expand_hidden(new_size, seed=args.seed + epoch + 1)
             optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="min", factor=0.5, patience=2, threshold=0.001,
+                threshold_mode="rel", min_lr=1e-5,
+            )
             # Widen the best checkpoint as well as the live model. Expansion preserves
             # old logits, so the previous best policy remains available at the new width.
             # Do not reset its validation score: doing so can discard a much better
