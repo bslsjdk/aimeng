@@ -35,3 +35,12 @@ jobs:
         run: python -m unittest tests.test_recurrent_reasoning_benchmark
       - name: Run concept-cloud unit tests
         run: python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
+      - name: Run repeated-seed multi-hop benchmark
+        run: |
+          python scripts/benchmark_recurrent_reasoning.py --steps 60 --train-size 512 --test-size 128 --batch-size 32 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 > recurrent-reasoning-results.json
+      - name: Upload benchmark JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: recurrent-reasoning-results
+          path: recurrent-reasoning-results.json
+          if-no-files-found: error
