@@ -13,6 +13,7 @@ from scripts.train_aimeng_mc_curriculum import (
     ParkourGRUPolicy,
     allowed_actions_for_stage,
     compute_class_weights,
+    mask_action_logits,
     collate_episodes,
     evaluate_rollouts,
 )
@@ -49,6 +50,16 @@ class ParkourTrainingTests(unittest.TestCase):
         self.assertTrue(turning.issubset(small_jump))
         self.assertTrue(small_jump.issubset(rotating))
         self.assertTrue(rotating.issubset(double_jump))
+
+    def test_locked_actions_cannot_win_logits(self):
+        logits = torch.full((10,), -3.0)
+        logits[1] = 100.0  # turn_left is not unlocked during walking
+        logits[9] = 1.0    # stop
+        masked = mask_action_logits(logits, "walking")
+        self.assertEqual(int(masked.argmax().item()), 9)
+        self.assertTrue(torch.isneginf(masked[1]))
+        self.assertFalse(torch.isneginf(masked[0]))
+        self.assertFalse(torch.isneginf(masked[9]))
 
     def test_model_forward_shapes(self):
         model = ParkourGRUPolicy(hidden_size=8, encoder_width=16)
