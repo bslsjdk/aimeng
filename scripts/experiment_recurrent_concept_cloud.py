@@ -158,8 +158,8 @@ class RecurrentConceptCloudNet(nn.Module):
             revised = gate * state + (1.0 - gate) * proposal
             # Reactivate a bounded set using context + current multi-cloud belief.
             cloud_belief = torch.softmax(cloud_logits, dim=-1) @ self.cloud_embedding
-            neuron_scores = (self.neuron_base + self.context_seed(ctx + cloud_belief)) @ (ctx + cloud_belief).unsqueeze(-1)
-            neuron_scores = neuron_scores.squeeze(-1)
+            routed_context = self.context_seed(ctx + cloud_belief)
+            neuron_scores = (self.neuron_base.unsqueeze(0) * routed_context.unsqueeze(1)).sum(dim=-1)
             next_ids = neuron_scores.topk(self.active_k, dim=-1).indices
             next_mask = torch.zeros_like(active_mask)
             next_mask.scatter_(1, next_ids, True)
