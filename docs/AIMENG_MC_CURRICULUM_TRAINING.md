@@ -4,7 +4,7 @@
 
 - Dataset generation and evaluation-gate inspection use only Python's standard library.
 - The recurrent policy trainer requires PyTorch and should run in GitHub Actions or another training host, not be assumed to work in an Android terminal.
-- The current controller receives a structured 405-cell voxel observation (9×5×9), relative target offset and a four-way heading bucket. It is not image-based vision. The curriculum generator varies the easy walking stage's start position, heading and target distance, while keeping its only unlocked actions as walk-forward and stop.
+- The current controller receives a structured 405-cell voxel observation (9×5×9), relative target offset and a four-way heading bucket. It is not image-based vision. The curriculum generator varies the easy walking stage's start position, heading and target distance, while keeping its only unlocked actions as walk-forward and stop. The controller now has a separate geometry-to-action path for relative target offset, forward/lateral alignment, distance and the at-goal signal, alongside the recurrent hidden state.
 - The trained checkpoint is a cloud-side `.pt` research checkpoint. It is not an AIMG package, not an Android app model, and not connected to live Bedrock action control yet.
 
 ## Recommended first run on a phone
@@ -13,7 +13,7 @@ Open the repository on GitHub, choose **Actions → AIMENG-MC curriculum trainin
 
 - Maximum stage: `walking`
 - Episodes per stage: `1000`
-- Epochs per stage: `5`
+- Epochs per stage: `15`
 - Initial recurrent hidden units: `1024`
 - Maximum hidden units: `2048`
 - Automatic expansion: enabled
