@@ -1,0 +1,27 @@
+name: AIMENG dynamic expansion prototype tests
+
+on:
+  push:
+    paths:
+      - "scripts/dynamic_expansion.py"
+      - "tests/test_dynamic_expansion.py"
+      - ".github/workflows/dynamic-expansion.yml"
+  pull_request:
+    paths:
+      - "scripts/dynamic_expansion.py"
+      - "tests/test_dynamic_expansion.py"
+      - ".github/workflows/dynamic-expansion.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Test dynamic expansion
+        run: python -m unittest tests.test_dynamic_expansion -v
