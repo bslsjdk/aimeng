@@ -194,24 +194,55 @@ def make_course(stage: Stage, seed: int):
         distance = rng.randrange(1, min(7, max_forward) + 1)
         goal = (start_x + dx * distance, start_z + dz * distance)
     elif stage.name == "turning":
-        goal = (start_x + 4, start_z - 3)
-        start_yaw = 1
+        # Random start, heading and diagonal target. The world is still obstacle-free, but
+        # the route must combine straight movement and at least one controlled turn.
+        start = (
+            rng.randrange(2, WORLD_SIZE - 2),
+            rng.randrange(2, WORLD_SIZE - 2),
+        )
+        start_x, start_z = start
+        start_yaw = rng.randrange(4)
+        for _ in range(100):
+            goal = (rng.randrange(1, WORLD_SIZE - 1), rng.randrange(1, WORLD_SIZE - 1))
+            if (
+                goal != start
+                and goal[0] != start_x
+                and goal[1] != start_z
+                and abs(goal[0] - start_x) + abs(goal[1] - start_z) <= 8
+            ):
+                break
+        else:
+            goal = (max(1, start_x - 2), max(1, start_z - 2))
+    elif stage.name == "obstacle_avoidance":
+        # One randomly placed blocker interrupts a straight route. Spawn/heading/goal and
+        # the blocker distance change per seed, so the policy must learn a detour, not one map.
+        for _ in range(100):
+            start = (
+                rng.randrange(2, WORLD_SIZE - 2),
+                rng.randrange(2, WORLD_SIZE - 2),
+            )
+            start_x, start_z = start
+            start_yaw = rng.randrange(4)
+            dx, dz = DIRS[start_yaw]
+            if dx > 0:
+                max_forward = WORLD_SIZE - 1 - start_x
+            elif dx < 0:
+                max_forward = start_x
+            elif dz > 0:
+                max_forward = WORLD_SIZE - 1 - start_z
+            else:
+                max_forward = start_z
+            if max_forward >= 6:
+                break
+        else:
+            raise RuntimeError(f"could not choose a safe straight route for seed {seed}")
+        distance = rng.randrange(5, min(8, max_forward) + 1)
+        goal = (start_x + dx * distance, start_z + dz * distance)
+        blocker_distance = rng.randrange(2, distance - 1)
+        blocker = (start_x + dx * blocker_distance, start_z + dz * blocker_distance)
+        obstacles[blocker] = rng.choice((1, 1, 2))
     else:
-        goal = (start_x + 5, start_z)
-        start_yaw = 1
-        # A compulsory block on the straight line forces a safe turn and detour.
-        obstacles[(start_x + 2, start_z)] = 1
-        safe_corridor = {
-            (x, z)
-            for x in range(start_x, goal[0] + 1)
-            for z in (start_z - 1, start_z, start_z + 1)
-            if _in_world((x, z))
-        }
-        for pos in list(platforms):
-            if pos in safe_corridor or pos in obstacles:
-                continue
-            if rng.random() < stage.obstacle_rate:
-                obstacles[pos] = rng.choice((1, 1, 2))
+        raise ValueError(f"unsupported course stage: {stage.name}")
 
     # Retry a few deterministic per-episode seeds if random props happen to block the route.
     route = shortest_teacher_route(start, goal, start_yaw, platforms, obstacles, stage)
