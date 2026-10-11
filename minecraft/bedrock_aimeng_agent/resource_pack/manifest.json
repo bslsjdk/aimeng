@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "AIMENG Parkour Agent Resources",
+    "description": "Humanoid model and rendering resources for the AIMENG test character.",
+    "uuid": "6b197c80-f970-40f7-bc10-96a21c3fbca5",
+    "version": [0, 1, 0],
+    "min_engine_version": [1, 21, 90]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "b22c47c1-c7ad-465b-9a13-2bc3e16a8e43",
+      "version": [0, 1, 0]
+    }
+  ]
+}
