@@ -80,6 +80,20 @@ class ParkourTrainingTests(unittest.TestCase):
         self.assertEqual(tuple(logits.shape), (2, 3, 10))
         self.assertEqual(tuple(hidden.shape), (2, 8))
 
+    def test_nonlinear_geometry_head_receives_gradients(self):
+        model = ParkourGRUPolicy(hidden_size=8, encoder_width=16)
+        voxels = torch.randint(0, 7, (2, 3, 405))
+        goals = torch.tensor(
+            [[[2.0, 0.0, -1.0], [0.0, 0.0, 0.0], [-2.0, 0.0, 3.0]]] * 2
+        )
+        yaws = torch.tensor([[0, 1, 2], [3, 2, 1]])
+        logits, _ = model(voxels, goals, yaws)
+        logits.square().mean().backward()
+        self.assertIsNotNone(model.geometry_mlp[0].weight.grad)
+        self.assertGreater(float(model.geometry_mlp[0].weight.grad.abs().sum()), 0.0)
+        self.assertIsNotNone(model.geometry_mlp[2].weight.grad)
+        self.assertGreater(float(model.geometry_mlp[2].weight.grad.abs().sum()), 0.0)
+
     def test_hidden_expansion_preserves_logits(self):
         torch.manual_seed(4)
         model = ParkourGRUPolicy(hidden_size=8, encoder_width=16).eval()
