@@ -17,7 +17,7 @@ permissions:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,10 +35,10 @@ jobs:
         run: python -m unittest tests.test_recurrent_reasoning_benchmark
       - name: Run concept-cloud unit tests
         run: python -m unittest tests.test_concept_cloud tests.test_recurrent_concept_cloud
-      - name: Run repeated-seed multi-hop benchmark
+      - name: Run 10k-step repeated-seed multi-hop benchmark
         run: |
           set -o pipefail
-          python scripts/benchmark_recurrent_reasoning.py --steps 800 --train-size 4096 --test-size 1024 --batch-size 64 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee recurrent-reasoning-results.json
+          python scripts/benchmark_recurrent_reasoning.py --steps 10000 --train-size 4096 --test-size 1024 --batch-size 64 --seq-len 8 --seeds 17,23,41 --device cpu --threads 1 | tee recurrent-reasoning-results.json
       - name: Write benchmark summary
         if: always() && hashFiles('recurrent-reasoning-results.json') != ''
         run: |
