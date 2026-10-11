@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import statistics
 import time
 
 import torch
@@ -246,6 +247,39 @@ def main():
     }
     for seed in seeds:
         results["runs"].append(run_seed(args, seed, device))
+
+    # Aggregate repeated seeds so a single lucky initialization is not mistaken
+    # for a general result. Keep the per-seed records above for auditability.
+    def stats(values):
+        return {
+            "mean": statistics.mean(values),
+            "population_stddev": statistics.pstdev(values),
+            "n_seeds": len(values),
+        }
+
+    summary = {}
+    for cycles in ("1", "2", "3", "4"):
+        entries = [run["concept_cloud_by_cycles"][cycles] for run in results["runs"]]
+        summary[f"concept_cloud_cycles_{cycles}"] = {
+            "same_length_accuracy": stats([e["test_same_length"]["accuracy"] for e in entries]),
+            "same_length_throughput": stats([e["test_same_length"]["examples_per_second"] for e in entries]),
+            "router_recall": stats([e["test_same_length"]["router_recall_at_k"] for e in entries]),
+            "longer_sequence_accuracy": {
+                length: stats([e["test_longer_sequences"][length]["accuracy"] for e in entries])
+                for length in entries[0]["test_longer_sequences"]
+            },
+        }
+    for model_key in ("gru_same_width", "gru_parameter_matched"):
+        entries = [run[model_key] for run in results["runs"]]
+        summary[model_key] = {
+            "same_length_accuracy": stats([e["test_same_length"]["accuracy"] for e in entries]),
+            "same_length_throughput": stats([e["test_same_length"]["examples_per_second"] for e in entries]),
+            "longer_sequence_accuracy": {
+                length: stats([e["test_longer_sequences"][length]["accuracy"] for e in entries])
+                for length in entries[0]["test_longer_sequences"]
+            },
+        }
+    results["summary_across_seeds"] = summary
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
