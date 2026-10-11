@@ -1,0 +1,49 @@
+name: AIMENG-MC parkour curriculum
+
+on:
+  push:
+    paths:
+      - "scripts/generate_aimeng_mc_curriculum.py"
+      - "tests/test_aimeng_mc_curriculum.py"
+      - "docs/AIMENG_MC_TRAINING_DATA.md"
+      - ".github/workflows/aimeng-mc-curriculum.yml"
+  pull_request:
+    paths:
+      - "scripts/generate_aimeng_mc_curriculum.py"
+      - "tests/test_aimeng_mc_curriculum.py"
+      - ".github/workflows/aimeng-mc-curriculum.yml"
+  workflow_dispatch:
+
+jobs:
+  test-curriculum:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check Python syntax
+        run: python -m py_compile scripts/generate_aimeng_mc_curriculum.py
+      - name: Run generator self-test
+        run: python scripts/generate_aimeng_mc_curriculum.py --self-test
+      - name: Run curriculum unit tests
+        run: python -m unittest tests.test_aimeng_mc_curriculum -v
+      - name: Generate a small late-stage smoke dataset
+        run: |
+          python scripts/generate_aimeng_mc_curriculum.py --stage double_jump --episodes 10 --seed 424242 --output /tmp/aimeng_mc_double_jump.jsonl
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows = [json.loads(line) for line in Path("/tmp/aimeng_mc_double_jump.jsonl").read_text().splitlines()]
+          assert rows, "no records generated"
+          assert all(row["schema"] == "aimeng-mc-curriculum-step-v1" for row in rows)
+          assert all(len(row["observation"]["voxels"]) == 405 for row in rows)
+          assert all(row["curriculum_stage"]["name"] == "double_jump" for row in rows)
+          episode_splits = {}
+          for row in rows:
+              episode_splits.setdefault(row["episode_id"], set()).add(row["split"])
+          assert len(episode_splits) == 10
+          assert all(len(splits) == 1 for splits in episode_splits.values()), "episode leaked across splits"
+          assert all(any(r["teacher_action"]["action"] == "double_jump_forward" for r in rows if r["episode_id"] == episode) for episode in episode_splits)
+          print(f"validated {len(rows)} records from {len(episode_splits)} episodes")
+          PY

@@ -1,0 +1,93 @@
+name: AIMENG-MC walking-to-turning curriculum benchmark
+
+on:
+  push:
+    paths:
+      - ".github/workflows/aimeng-mc-initial-walking-benchmark.yml"
+      - "scripts/generate_aimeng_mc_curriculum.py"
+      - "scripts/train_aimeng_mc_curriculum.py"
+
+jobs:
+  progressive-benchmark:
+    if: contains(github.event.head_commit.message, '[run-aimeng-mc-walking-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-rebalanced-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-stage-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-diverse-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walk-train-mask-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-geometry-skip-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walking-geometry-head-benchmark]') || contains(github.event.head_commit.message, '[run-aimeng-mc-walk-turn-curriculum-benchmark]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Generate and train the easy walking stage
+        run: |
+          mkdir -p data checkpoints reports
+          python scripts/generate_aimeng_mc_curriculum.py --stage walking --episodes 1000 --seed 20261011 --output data/walking.jsonl
+          python scripts/train_aimeng_mc_curriculum.py --stage walking --data data/walking.jsonl --epochs 15 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20261011 --device cpu --threads 2 --output checkpoints/walking.pt --report reports/walking.json
+
+      - name: Check walking gate
+        id: walking_gate
+        run: |
+          python scripts/generate_aimeng_mc_curriculum.py --metrics reports/walking.json > reports/walking.gate.json
+          cat reports/walking.gate.json
+          echo "next_stage=$(python -c 'import json; print(json.load(open("reports/walking.gate.json"))["recommended_stage"] or "")')" >> "$GITHUB_OUTPUT"
+          echo "decision=$(python -c 'import json; print(json.load(open("reports/walking.gate.json"))["decision"])')" >> "$GITHUB_OUTPUT"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("reports/walking.json").read_text())
+          assert report["stage"] == "walking"
+          assert report["test_episode_count"] == 100
+          assert 0.0 <= report["test_episode_success_rate"] <= 1.0
+          assert Path("checkpoints/walking.pt").is_file()
+          print(json.dumps({
+              "stage": report["stage"],
+              "hidden_size": report["hidden_size"],
+              "train_action_accuracy": report["current_stage_train_action_accuracy"],
+              "validation_action_accuracy": report["validation_action_accuracy"],
+              "validation_episode_success_rate": report["validation_episode_success_rate"],
+              "test_action_accuracy": report["test_action_accuracy"],
+              "test_episode_success_rate": report["test_episode_success_rate"],
+              "test_episodes": report["test_episode_count"],
+              "expansion_events": report["expansion_events"],
+          }, indent=2))
+          PY
+
+      - name: Generate and train turning while replaying walking
+        if: steps.walking_gate.outputs.next_stage == 'turning' && steps.walking_gate.outputs.decision == 'collect_more_evaluation'
+        run: |
+          python scripts/generate_aimeng_mc_curriculum.py --stage turning --episodes 1000 --seed 20262012 --output data/turning.jsonl
+          python scripts/train_aimeng_mc_curriculum.py --stage turning --data data/turning.jsonl --resume checkpoints/walking.pt --prior-report reports/walking.json --replay-data data/walking.jsonl --epochs 15 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20262012 --device cpu --threads 2 --output checkpoints/turning.pt --report reports/turning.json
+
+      - name: Check turning mastery and walking retention
+        if: steps.walking_gate.outputs.next_stage == 'turning' && steps.walking_gate.outputs.decision == 'collect_more_evaluation'
+        run: |
+          python scripts/generate_aimeng_mc_curriculum.py --metrics reports/turning.json > reports/turning.gate.json
+          cat reports/turning.gate.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("reports/turning.json").read_text())
+          gate = json.loads(Path("reports/turning.gate.json").read_text())
+          walking = report["stages"].get("walking", {})
+          print(json.dumps({
+              "turning_validation_success_rate": report["validation_episode_success_rate"],
+              "turning_test_success_rate": report["test_episode_success_rate"],
+              "turning_test_episodes": report["test_episode_count"],
+              "walking_retention_success_rate": walking.get("retention_success_rate"),
+              "walking_retention_episodes": walking.get("retention_episodes"),
+              "next_recommended_stage": gate["recommended_stage"],
+              "decision": gate["decision"],
+          }, indent=2))
+          PY
+
+      - name: Upload curriculum checkpoints and metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aimeng-mc-walking-turning-curriculum
+          path: |
+            checkpoints/
+            reports/
+          if-no-files-found: warn
+          retention-days: 30

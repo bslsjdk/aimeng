@@ -19,6 +19,20 @@ Copy the resulting `.aimg` file to the phone and import it in the AIMENG runtime
 
 See [AIMG format specification](docs/AIMG_FORMAT.md).
 
+## AIMENG-MC staged parkour curriculum (research prototype)
+
+The experimental Minecraft-control branch adds a generated voxel-data pipeline and recurrent training loop:
+
+- [Observation protocol](docs/AIMENG_MC_3D_OBSERVATION.md)
+- [Curriculum and dataset generation](docs/AIMENG_MC_TRAINING_DATA.md)
+- [Training workflow and memory budget](docs/AIMENG_MC_CURRICULUM_TRAINING.md)
+- [Synthetic curriculum generator](scripts/generate_aimeng_mc_curriculum.py)
+- [Recurrent policy trainer](scripts/train_aimeng_mc_curriculum.py)
+
+The training order is walking → turning → obstacle avoidance → small jump → gap jump → rotating jump → super jump → double jump. GitHub Actions runs generator/trainer tests and a tiny walking smoke-train; use the manual **AIMENG-MC curriculum training** workflow for a real synthetic training run and downloadable experiment artifacts.
+
+**Scope warning:** these are synthetic grid-world tasks and abstract jump macros. They are not a working Bedrock Add-On, not live Minecraft control, and not an AIMG-compatible Android model. Real game physics, input delivery, export, latency and peak memory remain unverified.
+
 ## Important current limitation
 
 The packer converts the existing portable mobile export; it does **not** turn an arbitrary PyTorch checkpoint into a compatible model or make a weak model intelligent by compression alone. A model architecture/exporter change is required before a new cloud-trained architecture can run on the phone. The phone runtime also needs real-device profiling before claiming a latency or RAM target.
