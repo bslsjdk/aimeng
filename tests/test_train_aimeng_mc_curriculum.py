@@ -170,6 +170,10 @@ class ParkourTrainingTests(unittest.TestCase):
             self.assertEqual(result["episodes"], 2)
             self.assertGreaterEqual(result["success_rate"], 0.0)
             self.assertLessEqual(result["success_rate"], 1.0)
+            self.assertGreaterEqual(result["mean_steps"], 1.0)
+            for metric in ("invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate"):
+                self.assertGreaterEqual(result[metric], 0.0)
+                self.assertLessEqual(result[metric], 1.0)
 
 
 if __name__ == "__main__":
