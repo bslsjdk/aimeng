@@ -747,12 +747,20 @@ def main() -> int:
         "validation_action_accuracy": val_accuracy,
         "validation_action_recall": val_recalls,
         "validation_episode_success_rate": current_validation_rollout["success_rate"],
+        "validation_rollout_diagnostics": {
+            key: current_validation_rollout[key]
+            for key in ("mean_steps", "invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate")
+        },
         "test_action_accuracy": test_accuracy,
         "test_action_recall": test_recalls,
         "class_weights": {ACTIONS[i]: float(class_weights[i].item()) for i in range(len(ACTIONS))},
         "test_episode_success_rate": current_rollout["success_rate"],
         "test_episode_successes": current_rollout["successes"],
         "test_episode_count": current_rollout["episodes"],
+        "test_rollout_diagnostics": {
+            key: current_rollout[key]
+            for key in ("mean_steps", "invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate")
+        },
         "expansion_events": expansion_events,
         "history": history,
         "stages": prior_metrics,
@@ -780,7 +788,13 @@ def main() -> int:
         "test_teacher_action_accuracy": test_accuracy,
         "validation_episode_success_rate": current_validation_rollout["success_rate"],
         "test_episode_success_rate": current_rollout["success_rate"],
-        "test_episodes": current_rollout["episodes"], "expansion_events": expansion_events,
+        "test_episodes": current_rollout["episodes"],
+        "test_success_rate": current_rollout["success_rate"],
+        "test_rollout_diagnostics": {
+            key: current_rollout[key]
+            for key in ("mean_steps", "invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate")
+        },
+        "expansion_events": expansion_events,
     }, ensure_ascii=False))
     return 0
 
