@@ -23,7 +23,7 @@ jobs:
         run: |
           mkdir -p data checkpoints reports
           python scripts/generate_aimeng_mc_curriculum.py --stage walking --episodes 1000 --seed 20261011 --output data/walking.jsonl
-          python scripts/train_aimeng_mc_curriculum.py --stage walking --data data/walking.jsonl --epochs 15 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20261011 --device cpu --threads 2 --output checkpoints/walking.pt --report reports/walking.json
+          python scripts/train_aimeng_mc_curriculum.py --stage walking --data data/walking.jsonl --epochs 30 --batch-size 16 --hidden-size 1024 --max-hidden-size 2048 --auto-expand --seed 20261011 --device cpu --threads 2 --output checkpoints/walking.pt --report reports/walking.json
 
       - name: Check walking gate
         id: walking_gate
@@ -85,7 +85,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aimeng-mc-walking-turning-curriculum
+          name: aimeng-mc-balanced-turning-geometry-policy
           path: |
             checkpoints/
             reports/

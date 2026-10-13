@@ -189,6 +189,13 @@ class ParkourGRUPolicy(nn.Module):
         # short gradient path instead of making them compete with hundreds of recurrent units.
         self.readout = nn.Linear(hidden_size, len(ACTIONS))
         self.geometry_head = nn.Linear(STATIC_FEATURE_SIZE, len(ACTIONS), bias=False)
+        # The linear head handles simple geometric signals; this small nonlinear head
+        # learns conditional rules such as "turn toward the target only when lateral error
+        # is nonzero". This targets turning failures without widening the recurrent state.
+        self.geometry_mlp = nn.Sequential(
+            nn.Linear(STATIC_FEATURE_SIZE, 64), nn.ReLU(),
+            nn.Linear(64, len(ACTIONS)),
+        )
 
     def forward(
         self, voxels: Tensor, goals: Tensor, yaws: Tensor, hidden: Tensor | None = None,
@@ -228,7 +235,8 @@ class ParkourGRUPolicy(nn.Module):
         logits = []
         for step in range(steps):
             hidden = self.cell(encoded[:, step, :], hidden)
-            logits.append(self.readout(hidden) + self.geometry_head(static_features[:, step, :]))
+            geometry = static_features[:, step, :]
+            logits.append(self.readout(hidden) + self.geometry_head(geometry) + self.geometry_mlp(geometry))
         if not logits:
             return voxels.new_empty((batch, 0, len(ACTIONS)), dtype=torch.float32), hidden
         return torch.stack(logits, dim=1), hidden
@@ -262,6 +270,7 @@ class ParkourGRUPolicy(nn.Module):
             widened.readout.weight[:, old_size:].zero_()
             widened.readout.bias.copy_(self.readout.bias)
             widened.geometry_head.load_state_dict(self.geometry_head.state_dict())
+            widened.geometry_mlp.load_state_dict(self.geometry_mlp.state_dict())
         return widened
 
 
@@ -392,11 +401,15 @@ def clone_state_dict(model: nn.Module) -> dict[str, Tensor]:
 def evaluate_rollouts(
     model: ParkourGRUPolicy, dataset: EpisodeDataset, device: torch.device,
 ) -> dict[str, Any]:
-    """Roll out policy on reconstructed held-out symbolic courses."""
+    """Roll out policy on held-out courses and report failure modes, not accuracy alone."""
     if not len(dataset):
-        return {"success_rate": 0.0, "successes": 0, "episodes": 0}
+        return {
+            "success_rate": 0.0, "successes": 0, "episodes": 0, "mean_steps": 0.0,
+            "invalid_action_rate": 0.0, "goal_reached_rate": 0.0,
+            "premature_stop_rate": 0.0, "timeout_rate": 0.0,
+        }
     model.eval()
-    successes = 0
+    successes = total_steps = invalid_actions = goal_reached = premature_stops = timeouts = 0
     with torch.no_grad():
         for episode_index in range(len(dataset)):
             rows = dataset[episode_index]
@@ -407,8 +420,11 @@ def evaluate_rollouts(
             state = (start[0], start[1], start_yaw)
             hidden = None
             solved = False
+            reached_goal = False
+            terminated = False
             episode_id = f"rollout-{stage.name}-{map_seed}"
             for step in range(MAX_ROLLOUT_STEPS):
+                total_steps += 1
                 x, z, yaw = state
                 record = make_observation(
                     (x, z), yaw, goal, platforms, obstacles, stage,
@@ -423,6 +439,9 @@ def evaluate_rollouts(
                 action = ACTIONS[int(masked_logits.argmax().item())]
                 if action == "stop":
                     solved = state[:2] == goal
+                    reached_goal = reached_goal or solved
+                    premature_stops += int(not solved)
+                    terminated = True
                     break
                 legal_transitions = {
                     candidate_action: next_state
@@ -432,9 +451,25 @@ def evaluate_rollouts(
                 }
                 if action in legal_transitions:
                     state = legal_transitions[action]
-                # Invalid actions consume a step and leave the agent in place; policy may recover.
+                    reached_goal = reached_goal or state[:2] == goal
+                else:
+                    # Invalid actions consume a step and leave the agent in place; policy may recover.
+                    invalid_actions += 1
+            if not terminated:
+                timeouts += 1
             successes += int(solved)
-    return {"success_rate": successes / len(dataset), "successes": successes, "episodes": len(dataset)}
+            goal_reached += int(reached_goal)
+    episodes = len(dataset)
+    return {
+        "success_rate": successes / episodes,
+        "successes": successes,
+        "episodes": episodes,
+        "mean_steps": total_steps / episodes,
+        "invalid_action_rate": invalid_actions / max(total_steps, 1),
+        "goal_reached_rate": goal_reached / episodes,
+        "premature_stop_rate": premature_stops / episodes,
+        "timeout_rate": timeouts / episodes,
+    }
 
 
 def main() -> int:
@@ -536,7 +571,19 @@ def main() -> int:
         model = ParkourGRUPolicy(int(checkpoint["hidden_size"]), int(checkpoint["encoder_width"])).to(device)
         if model.hidden_size > args.max_hidden_size:
             parser.error("resume checkpoint hidden size exceeds --max-hidden-size")
-        model.load_state_dict(checkpoint["model_state_dict"])
+        # Backward-compatible warm start: older v3 checkpoints have only the linear
+        # geometry head. Keep their learned weights and initialize the new nonlinear
+        # correction head, then fine-tune it on the current curriculum stage.
+        incompatible = model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        allowed_missing = {
+            "geometry_mlp.0.weight", "geometry_mlp.0.bias",
+            "geometry_mlp.2.weight", "geometry_mlp.2.bias",
+        }
+        if set(incompatible.missing_keys) - allowed_missing or incompatible.unexpected_keys:
+            parser.error(
+                "checkpoint architecture mismatch: "
+                f"missing={incompatible.missing_keys}, unexpected={incompatible.unexpected_keys}"
+            )
     else:
         model = ParkourGRUPolicy(args.hidden_size).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
@@ -700,12 +747,20 @@ def main() -> int:
         "validation_action_accuracy": val_accuracy,
         "validation_action_recall": val_recalls,
         "validation_episode_success_rate": current_validation_rollout["success_rate"],
+        "validation_rollout_diagnostics": {
+            key: current_validation_rollout[key]
+            for key in ("mean_steps", "invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate")
+        },
         "test_action_accuracy": test_accuracy,
         "test_action_recall": test_recalls,
         "class_weights": {ACTIONS[i]: float(class_weights[i].item()) for i in range(len(ACTIONS))},
         "test_episode_success_rate": current_rollout["success_rate"],
         "test_episode_successes": current_rollout["successes"],
         "test_episode_count": current_rollout["episodes"],
+        "test_rollout_diagnostics": {
+            key: current_rollout[key]
+            for key in ("mean_steps", "invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate")
+        },
         "expansion_events": expansion_events,
         "history": history,
         "stages": prior_metrics,
@@ -733,7 +788,13 @@ def main() -> int:
         "test_teacher_action_accuracy": test_accuracy,
         "validation_episode_success_rate": current_validation_rollout["success_rate"],
         "test_episode_success_rate": current_rollout["success_rate"],
-        "test_episodes": current_rollout["episodes"], "expansion_events": expansion_events,
+        "test_episodes": current_rollout["episodes"],
+        "test_success_rate": current_rollout["success_rate"],
+        "test_rollout_diagnostics": {
+            key: current_rollout[key]
+            for key in ("mean_steps", "invalid_action_rate", "goal_reached_rate", "premature_stop_rate", "timeout_rate")
+        },
+        "expansion_events": expansion_events,
     }, ensure_ascii=False))
     return 0
 
