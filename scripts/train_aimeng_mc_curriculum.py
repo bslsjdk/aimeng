@@ -401,11 +401,15 @@ def clone_state_dict(model: nn.Module) -> dict[str, Tensor]:
 def evaluate_rollouts(
     model: ParkourGRUPolicy, dataset: EpisodeDataset, device: torch.device,
 ) -> dict[str, Any]:
-    """Roll out policy on reconstructed held-out symbolic courses."""
+    """Roll out policy on held-out courses and report failure modes, not accuracy alone."""
     if not len(dataset):
-        return {"success_rate": 0.0, "successes": 0, "episodes": 0}
+        return {
+            "success_rate": 0.0, "successes": 0, "episodes": 0, "mean_steps": 0.0,
+            "invalid_action_rate": 0.0, "goal_reached_rate": 0.0,
+            "premature_stop_rate": 0.0, "timeout_rate": 0.0,
+        }
     model.eval()
-    successes = 0
+    successes = total_steps = invalid_actions = goal_reached = premature_stops = timeouts = 0
     with torch.no_grad():
         for episode_index in range(len(dataset)):
             rows = dataset[episode_index]
@@ -416,8 +420,11 @@ def evaluate_rollouts(
             state = (start[0], start[1], start_yaw)
             hidden = None
             solved = False
+            reached_goal = False
+            terminated = False
             episode_id = f"rollout-{stage.name}-{map_seed}"
             for step in range(MAX_ROLLOUT_STEPS):
+                total_steps += 1
                 x, z, yaw = state
                 record = make_observation(
                     (x, z), yaw, goal, platforms, obstacles, stage,
@@ -432,6 +439,9 @@ def evaluate_rollouts(
                 action = ACTIONS[int(masked_logits.argmax().item())]
                 if action == "stop":
                     solved = state[:2] == goal
+                    reached_goal = reached_goal or solved
+                    premature_stops += int(not solved)
+                    terminated = True
                     break
                 legal_transitions = {
                     candidate_action: next_state
@@ -441,9 +451,25 @@ def evaluate_rollouts(
                 }
                 if action in legal_transitions:
                     state = legal_transitions[action]
-                # Invalid actions consume a step and leave the agent in place; policy may recover.
+                    reached_goal = reached_goal or state[:2] == goal
+                else:
+                    # Invalid actions consume a step and leave the agent in place; policy may recover.
+                    invalid_actions += 1
+            if not terminated:
+                timeouts += 1
             successes += int(solved)
-    return {"success_rate": successes / len(dataset), "successes": successes, "episodes": len(dataset)}
+            goal_reached += int(reached_goal)
+    episodes = len(dataset)
+    return {
+        "success_rate": successes / episodes,
+        "successes": successes,
+        "episodes": episodes,
+        "mean_steps": total_steps / episodes,
+        "invalid_action_rate": invalid_actions / max(total_steps, 1),
+        "goal_reached_rate": goal_reached / episodes,
+        "premature_stop_rate": premature_stops / episodes,
+        "timeout_rate": timeouts / episodes,
+    }
 
 
 def main() -> int:
